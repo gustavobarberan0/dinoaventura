@@ -665,7 +665,7 @@ export function crearPterosaurio({
     for (const lado of [-1, 1]) {
         const ala = new THREE.Group();
         ala.position.set(0, E * 0.02, lado * E * 0.04);
-        const membrana = esfera(E * 0.16, E * 0.012, E * 0.42, color, 6);
+        const membrana = esfera(E * 0.16, E * 0.02, E * 0.42, color, 6);
         membrana.position.set(-E * 0.02, 0, lado * E * 0.42);
         ala.add(membrana);
         const dedo = cilindroEntre(

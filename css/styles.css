@@ -77,7 +77,9 @@ button { cursor: pointer; border: 0; background: none; }
 body.cargando #app,
 body.intro-activa #app {
     opacity: 0;
+    visibility: hidden;
     pointer-events: none;
+    transition: none;
 }
 
 /* ------------------------------ TOPBAR -------------------------------- */
@@ -783,8 +785,8 @@ body.intro-activa #app {
     opacity: 1;
     transition: opacity 0.9s ease, visibility 0.9s;
     background:
-        radial-gradient(ellipse at 18% 35%, rgba(5, 12, 8, 0.72), transparent 58%),
-        linear-gradient(180deg, rgba(4, 10, 6, 0.55), transparent 30%, transparent 70%, rgba(4, 10, 6, 0.55));
+        radial-gradient(ellipse at 20% 36%, rgba(4, 10, 7, 0.78), rgba(4, 10, 7, 0.34) 46%, transparent 70%),
+        linear-gradient(180deg, rgba(4, 10, 6, 0.62) 0%, rgba(4, 10, 6, 0.12) 24%, rgba(4, 10, 6, 0.12) 72%, rgba(4, 10, 6, 0.7) 100%);
 }
 .intro-overlay.hidden { opacity: 0; visibility: hidden; }
 

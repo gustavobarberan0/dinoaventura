@@ -42,6 +42,7 @@ js/texturas.js      Texturas dibujadas en canvas
 js/interfaz.js      Ficha, ruta, quiz, voz, glosario, guía e impresión
 js/main.js          Arranque, calidad y progreso de carga
 models/trex.glb     T. rex animado (Quaternius, CC0)
+models/jeep.glb     Jeep safari (Zsky, CC-BY)
 vendor/three/       Three.js r-local
 ```
 
@@ -49,9 +50,12 @@ vendor/three/       Three.js r-local
 
 - **T. rex animado**: [Quaternius](https://quaternius.com/) vía
   [Poly Pizza](https://poly.pizza/m/UYtneO5FpF), licencia CC0.
+- **Jeep safari**: [Zsky](https://poly.pizza/u/Zsky) vía
+  [Poly Pizza](https://poly.pizza/m/AcSdGGrgYP), licencia CC-BY (atribución
+  requerida; se acredita acá y en la guía docente del sitio).
 - **Three.js**: MIT.
-- Resto de los modelos (dinosaurios, plantas, jeep, volcanes) generados por
-  código en `js/vida.js` y `js/escena.js`.
+- Resto de los modelos (dinosaurios, plantas, volcanes, nido, laguna) generados
+  por código en `js/vida.js` y `js/escena.js`.
 
 ## Despliegue
 

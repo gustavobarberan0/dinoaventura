@@ -114,25 +114,43 @@ export function texturaAgua() {
     const ctx = canvas.getContext('2d');
     const rand = sembrado(4321);
 
-    const grad = ctx.createLinearGradient(0, 0, lado, lado);
-    grad.addColorStop(0, '#3c7f8c');
-    grad.addColorStop(0.5, '#4f9fae');
-    grad.addColorStop(1, '#2f6a78');
-    ctx.fillStyle = grad;
+    // Base pareja: si el degradé es fuerte, al repetir la textura se ve una
+    // grilla de cuadrados. Mejor un azul plano y las ondas encima.
+    ctx.fillStyle = '#4b93a1';
     ctx.fillRect(0, 0, lado, lado);
 
-    ctx.strokeStyle = 'rgba(220,255,255,0.22)';
-    ctx.lineWidth = 1.2;
-    for (let i = 0; i < 60; i++) {
+    // Ondas cortas y suaves, sin bordes duros.
+    for (let i = 0; i < 46; i++) {
         const y = rand() * lado;
         const x = rand() * lado;
-        const ancho = 10 + rand() * 50;
+        const ancho = 14 + rand() * 46;
+        ctx.strokeStyle = `rgba(206,246,250,${0.05 + rand() * 0.09})`;
+        ctx.lineWidth = 1 + rand() * 2.4;
         ctx.beginPath();
         ctx.moveTo(x, y);
-        ctx.quadraticCurveTo(x + ancho / 2, y - 3, x + ancho, y);
+        ctx.bezierCurveTo(
+            x + ancho * 0.3, y - 2.5,
+            x + ancho * 0.7, y + 2.5,
+            x + ancho, y
+        );
         ctx.stroke();
     }
-    return aTextura(canvas, 6);
+
+    // Unas manchas profundas para dar sensación de fondo.
+    for (let i = 0; i < 14; i++) {
+        const x = rand() * lado;
+        const y = rand() * lado;
+        const r = 8 + rand() * 22;
+        const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+        g.addColorStop(0, 'rgba(26,74,88,0.30)');
+        g.addColorStop(1, 'rgba(26,74,88,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    return aTextura(canvas, 4);
 }
 
 /* -------------------------------------------------------------- PARTICULAS */

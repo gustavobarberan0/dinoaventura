@@ -35,12 +35,12 @@ import {
 
 const UP = new THREE.Vector3(0, 1, 0);
 
+// Punto del camino donde arranca el jeep en la intro. Se usa tanto para
+// colocarlo como para sembrar los obstáculos que tiene que esquivar.
+const U_INTRO_INICIO = 0.025;
+
 function easeInOutCubic(t) {
     return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-}
-
-function easeOutQuint(t) {
-    return 1 - Math.pow(1 - t, 5);
 }
 
 function clamp01(v) {
@@ -128,7 +128,6 @@ export class Recorrido {
         this.autoTour = false;
         this.temporizadorTour = null;
         this.introActiva = false;
-        this.intensidadWarp = 0;
         this.calidadAlta = this.opciones.calidadAlta;
         this.mezcla = {
             arriba: new THREE.Color(PALETAS.triasico.arriba),
@@ -203,7 +202,6 @@ export class Recorrido {
         this.escena.add(this.luzSol.target);
 
         this._crearCielo();
-        this._crearEstelaTemporal();
         this._crearPolvo();
 
         window.addEventListener('resize', () => this.actualizarTamano());
@@ -253,7 +251,7 @@ export class Recorrido {
 
     /* ------------------------------------------------------------ TERRENO */
     _crearTerreno() {
-        const ancho = 540;
+        const ancho = 620;
         const fondo = 300;
         const geo = new THREE.PlaneGeometry(ancho, fondo, this.calidadAlta ? 150 : 90, this.calidadAlta ? 84 : 50);
         geo.rotateX(-Math.PI / 2);
@@ -393,6 +391,57 @@ export class Recorrido {
         return this.caminoMuestras[i].clone().lerp(this.caminoMuestras[j], idx - i);
     }
 
+    // Tangente y lateral del camino en un punto. El lateral es siempre
+    // perpendicular a la marcha y paralelo al suelo.
+    _marcoCamino(u) {
+        const punto = this._puntoCamino(u);
+        const adelante = this._puntoCamino(Math.min(1, u + 0.004))
+            .sub(punto).setY(0).normalize();
+        const lateral = new THREE.Vector3().crossVectors(adelante, UP).normalize();
+        return { punto, adelante, lateral };
+    }
+
+    /* -------------------------------------------------- OBSTÁCULOS DE ENTRADA */
+    // Rocas y un tronco sobre el camino, justo en el tramo que recorre el
+    // jeep durante la intro. El volantazo de la intro los esquiva.
+    _crearObstaculosIntro() {
+        this.obstaculosIntro = [];
+        const inicio = U_INTRO_INICIO;
+        const fin = this.uParada[0];
+        const lados = [-1, 1, -1];
+
+        for (let i = 0; i < 3; i++) {
+            // Mismo mapeo que usa la intro: e (0..1) → u del camino.
+            const e = (i + 0.5) / 3;
+            const u = inicio + (fin - inicio) * e;
+            const { punto, lateral } = this._marcoCamino(u);
+            const centro = punto.clone().addScaledVector(lateral, lados[i] * 2.45);
+            centro.y = 0;
+
+            let objeto;
+            if (i === 1) {
+                // Tronco caído atravesado en el borde del camino.
+                objeto = new THREE.Group();
+                const palo = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.42, 0.55, 4.6, 7),
+                    material('#5a4636')
+                );
+                palo.rotation.z = Math.PI / 2;
+                palo.position.y = 0.55;
+                palo.castShadow = true;
+                objeto.add(palo);
+                objeto.rotation.y = Math.atan2(-lateral.z, lateral.x);
+            } else {
+                objeto = crearRoca(1.35 + i * 0.35, i === 0 ? '#8a8175' : '#7d7468');
+                objeto.rotation.y = i * 1.7;
+            }
+
+            objeto.position.copy(centro);
+            this.escena.add(objeto);
+            this.obstaculosIntro.push(objeto);
+        }
+    }
+
     /* ------------------------------------------------------------- PARADAS */
     async construir(cuerpos, alProgreso = () => {}) {
         this.cuerpos = cuerpos;
@@ -403,6 +452,7 @@ export class Recorrido {
         alProgreso('Trazando el camino del safari', 0.09);
         await siguienteFrame();
         this._crearCamino();
+        this._crearObstaculosIntro();
 
         for (let i = 0; i < cuerpos.length; i++) {
             const cuerpo = cuerpos[i];
@@ -442,7 +492,7 @@ export class Recorrido {
             // Plateosaurus: el gigante del Triásico
             registrarCriatura(agregar(crearBipedo({
                 largo: 8, alto: 3.6, color: '#8a7a58', vientre: '#cdbb90', fase: 0.4
-            }), -4, 1, -0.55));
+            }), -7, 8, -0.55));
 
             // Herrerasaurus al acecho
             registrarCriatura(agregar(crearBipedo({
@@ -477,21 +527,30 @@ export class Recorrido {
 
             registrarCriatura(agregar(crearEstegosaurio({
                 largo: 9, alto: 3.4, color: '#7a7a4e', placas: '#b05f3c', fase: 3.3
-            }), 13, 2, -0.9));
+            }), 14, 9, -0.9));
 
             registrarCriatura(agregar(crearBipedo({
                 largo: 9, alto: 3.8, color: '#6b5a4a', vientre: '#c9b48a', cresta: '#a04a3c', fase: 5.2
             }), -17, 8, 1.1));
 
             // Laguna
+            const barro = new THREE.Mesh(
+                new THREE.CircleGeometry(10.6, 40),
+                new THREE.MeshStandardMaterial({ color: '#4a4030', roughness: 1 })
+            );
+            barro.rotation.x = -Math.PI / 2;
+            barro.position.set(3, 0.03, 16);
+            barro.receiveShadow = true;
+            grupo.add(barro);
+
             const agua = new THREE.Mesh(
                 new THREE.CircleGeometry(9, 40),
                 new THREE.MeshStandardMaterial({
                     map: texturaAgua(),
-                    color: '#9fd4d8',
+                    color: '#8fcbd2',
                     transparent: true,
-                    opacity: 0.88,
-                    roughness: 0.18,
+                    opacity: 0.92,
+                    roughness: 0.22,
                     metalness: 0.05
                 })
             );
@@ -523,7 +582,7 @@ export class Recorrido {
 
         if (cuerpo.id === 'cretacico') {
             // El T. rex llega como modelo animado; acá queda el anclaje.
-            this.anclaTrex = new THREE.Vector3(-1, 0, 0);
+            this.anclaTrex = new THREE.Vector3(-2, 0, -6);
             this.grupoTrex = grupo;
 
             registrarCriatura(agregar(crearTriceratops({
@@ -537,7 +596,7 @@ export class Recorrido {
             registrarCriatura(agregar(crearBipedo({
                 largo: 10, alto: 4.4, color: '#5f7a6a', vientre: '#bcc9a8',
                 cresta: '#c4553c', fase: 4.4
-            }), -15, -3, 0.8));
+            }), -16, 7, 0.8));
 
             agregar(crearPalmera(9, '#4f7f4a'), -22, 6, 0.6);
             agregar(crearPalmera(7.5, '#588a4e'), 20, -14, 1.9);
@@ -638,6 +697,9 @@ export class Recorrido {
         const cfg = ENCUADRE[bioma] || ENCUADRE.triasico;
         const camX = cfg.dist * 0.60;
         const camZ = cfg.dist * 0.80;
+        // El jeep se estaciona en el borde del camino: nada de árboles ahí.
+        const jeepX = cfg.dist * 0.288;
+        const jeepZ = cfg.dist * 0.034;
 
         for (let i = 0; i < cantidad; i++) {
             const ang = rand() * Math.PI * 2;
@@ -647,6 +709,13 @@ export class Recorrido {
             if (Math.abs(z) < 8) continue; // deja libre el camino
             // No tapa la cámara con un árbol gigante en primer plano.
             if (Math.hypot(x - camX, z - camZ) < 16) continue;
+            // Tampoco tapa el jeep ni la línea de visión hacia él.
+            if (Math.hypot(x - jeepX, z - jeepZ) < 10) continue;
+            const dx = camX - jeepX;
+            const dz = camZ - jeepZ;
+            const largo2 = dx * dx + dz * dz;
+            const t = Math.max(0, Math.min(1, ((x - jeepX) * dx + (z - jeepZ) * dz) / largo2));
+            if (Math.hypot(x - (jeepX + dx * t), z - (jeepZ + dz * t)) < 6.5) continue;
 
             const tirada = rand();
             let planta;
@@ -681,9 +750,9 @@ export class Recorrido {
         const volcan = new THREE.Group();
         volcan.position.set(x, 0, z);
 
-        const alto = 22 * escala;
+        const alto = 24 * escala;
         const radioBase = 19 * escala;
-        const radioCima = 4.2 * escala;
+        const radioCima = 2.9 * escala;
         const lados = 11;
 
         // Falda del volcán: cilindro con la base ancha y la cima angosta.
@@ -712,6 +781,15 @@ export class Recorrido {
         );
         crater.position.y = alto - 0.8 * escala;
         volcan.add(crater);
+
+        // Labio del cráter: marca el borde y evita que la cima parezca una mesa.
+        const labio = new THREE.Mesh(
+            new THREE.TorusGeometry(radioCima * 0.99, 0.55 * escala, 5, lados),
+            material('#3a2d27')
+        );
+        labio.rotation.x = Math.PI / 2;
+        labio.position.y = alto;
+        volcan.add(labio);
 
         // Lava líquida en el fondo del cráter.
         const lava = new THREE.Mesh(
@@ -846,7 +924,7 @@ export class Recorrido {
         for (let i = 0; i < cantidad; i++) {
             const ptero = crearPterosaurio({
                 envergadura: 5 + Math.random() * 2,
-                color: i % 2 ? '#6b5a48' : '#5c4f42',
+                color: i % 2 ? '#8a7460' : '#7c6852',
                 fase: Math.random() * 6.28
             });
             ptero.position.set((Math.random() - 0.5) * 20, altura + Math.random() * 8, (Math.random() - 0.5) * 20);
@@ -1002,34 +1080,106 @@ export class Recorrido {
         return Math.atan2(hasta.z - desde.z, hasta.x - desde.x);
     }
 
+    // Jeep GLB (Zsky, CC-BY). Si no carga, se arma uno procedural.
+    async _cargarJeepGLB(alProgreso) {
+        const loader = new GLTFLoader();
+        const gltf = await loader.loadAsync('./models/jeep.glb', (xhr) => {
+            if (xhr.total) alProgreso(Math.round((xhr.loaded / xhr.total) * 48));
+        });
+        const modelo = gltf.scene;
+
+        modelo.traverse((hijo) => {
+            if (!hijo.isMesh) return;
+            hijo.castShadow = this.calidadAlta;
+            hijo.receiveShadow = false;
+            hijo.frustumCulled = false;
+            // El verde del modelo es muy oscuro: lo aclaramos un poco para
+            // que se lea con la luz cálida del Mesozoico.
+            const mats = Array.isArray(hijo.material) ? hijo.material : [hijo.material];
+            for (const mat of mats) {
+                if (mat && mat.color && mat.name && /green|gas/i.test(mat.name)) {
+                    mat.color.multiplyScalar(1.55);
+                }
+                if (mat) mat.roughness = Math.min(1, (mat.roughness ?? 1) * 0.95);
+            }
+        });
+
+        // Centrar en el origen y apoyar las ruedas en y = 0.
+        const caja = new THREE.Box3().setFromObject(modelo);
+        const centro = caja.getCenter(new THREE.Vector3());
+        modelo.position.x -= centro.x;
+        modelo.position.z -= centro.z;
+        modelo.position.y -= caja.min.y;
+
+        // El modelo mira hacia +Z; el resto del código espera +X.
+        const alineado = new THREE.Group();
+        alineado.add(modelo);
+        alineado.rotation.y = Math.PI / 2;
+
+        const grupo = new THREE.Group();
+        grupo.add(alineado);
+
+        // Faros: una luz cálida que apenas ilumina el pasto.
+        const luzFaros = new THREE.PointLight(0xffe2a8, 6, 18, 2);
+        luzFaros.position.set(3.2, 1.2, 0);
+        grupo.add(luzFaros);
+
+        grupo.position.copy(this._anclaJeep(0));
+        grupo.rotation.y = this._giroHacia(grupo.position, this._objetivo(0));
+        this.escena.add(grupo);
+        this.jeep = grupo;
+        this.jeepGLB = true;
+        this.jeepCuerpo = alineado;
+        this.ruedas = [];
+    }
+
     async cargarVehiculo(alProgreso = () => {}) {
-        this._crearJeep();
+        try {
+            await this._cargarJeepGLB(alProgreso);
+        } catch (error) {
+            console.warn('No se pudo cargar jeep.glb, se usa el jeep procedural.', error);
+            this._crearJeep();
+        }
 
         // T. rex animado (Quaternius, CC0). Si falla, la parada sigue
         // funcionando con un tiranosaurio procedural.
         try {
             const loader = new GLTFLoader();
             const gltf = await loader.loadAsync('./models/trex.glb', (xhr) => {
-                if (xhr.total) alProgreso(Math.round((xhr.loaded / xhr.total) * 100));
+                if (xhr.total) alProgreso(48 + Math.round((xhr.loaded / xhr.total) * 52));
             });
             const modelo = gltf.scene;
 
-            const caja = new THREE.Box3().setFromObject(modelo);
+            // El T. rex viene con skinning: Box3 tiene que medirlo con
+            // "precise" o toma la caja del hueso en bind pose y lo deja
+            // diminuto. Normalizamos a 12 m de largo y apoyado en el suelo.
+            const medir = () => {
+                modelo.updateMatrixWorld(true);
+                return new THREE.Box3().setFromObject(modelo, true);
+            };
+
+            let caja = medir();
             const tamano = caja.getSize(new THREE.Vector3());
             const escala = 12 / Math.max(tamano.x, tamano.z);
-            modelo.scale.setScalar(escala);
-            modelo.updateMatrixWorld(true);
+            modelo.scale.multiplyScalar(escala);
 
-            const cajaEscalada = new THREE.Box3().setFromObject(modelo);
-            const centro = cajaEscalada.getCenter(new THREE.Vector3());
+            caja = medir();
+            const centro = caja.getCenter(new THREE.Vector3());
             modelo.position.x -= centro.x;
             modelo.position.z -= centro.z;
-            modelo.position.y -= cajaEscalada.min.y;
+            modelo.position.y -= caja.min.y;
 
             modelo.traverse((hijo) => {
                 if (!hijo.isMesh) return;
                 hijo.castShadow = this.calidadAlta;
                 hijo.frustumCulled = false;
+                // El GLB trae metalness 0.4 y sin entorno se ve casi negro.
+                const mats = Array.isArray(hijo.material) ? hijo.material : [hijo.material];
+                for (const mat of mats) {
+                    if (!mat) continue;
+                    mat.metalness = 0;
+                    mat.roughness = 0.85;
+                }
             });
 
             const contenedor = new THREE.Group();
@@ -1100,6 +1250,12 @@ export class Recorrido {
         this.paletaDestino = paleta;
         this.intensidadDestino = paleta.intensidad;
 
+        // El asteroide solo se ve en la parada de la extinción: a lo lejos su
+        // estela aditiva se ve como una raya blanca sobre el cielo.
+        if (this.asteroide) {
+            this.asteroide.grupo.visible = cuerpo ? cuerpo.id === 'extincion' : false;
+        }
+
         if (instantaneo) {
             this.mezcla.arriba.set(paleta.arriba);
             this.mezcla.abajo.set(paleta.abajo);
@@ -1137,77 +1293,6 @@ export class Recorrido {
         this.mezcla.sueloHemi.lerp(new THREE.Color(paleta.sueloHemi), k);
         this.luzSol.intensity += (this.intensidadDestino - this.luzSol.intensity) * k;
         this._volcarPaleta();
-    }
-
-    /* ------------------------------------------------------ ESTELA TEMPORAL */
-    _crearEstelaTemporal() {
-        const cantidad = this.calidadAlta ? 800 : 400;
-        const geo = new THREE.BufferGeometry();
-        const posiciones = new Float32Array(cantidad * 2 * 3);
-        this.estelaDatos = [];
-        for (let i = 0; i < cantidad; i++) {
-            const ang = Math.random() * Math.PI * 2;
-            const radio = 2.5 + Math.pow(Math.random(), 0.55) * 24;
-            this.estelaDatos.push({
-                x: Math.cos(ang) * radio,
-                y: Math.sin(ang) * radio,
-                z: -5 - Math.random() * 85
-            });
-        }
-        geo.setAttribute('position', new THREE.BufferAttribute(posiciones, 3));
-        const mat = new THREE.LineBasicMaterial({
-            color: 0xffd9a0,
-            transparent: true,
-            opacity: 0,
-            blending: THREE.AdditiveBlending,
-            depthWrite: false,
-            fog: false
-        });
-        this.estela = new THREE.LineSegments(geo, mat);
-        this.estela.frustumCulled = false;
-        this.estela.visible = false;
-        this.escena.add(this.estela);
-    }
-
-    _actualizarEstela(delta, intensidad) {
-        this.intensidadWarp = intensidad;
-        const visible = intensidad > 0.01;
-        this.estela.visible = visible;
-        if (!visible) {
-            if (this.camara.fov !== 58) {
-                this.camara.fov = 58;
-                this.camara.updateProjectionMatrix();
-            }
-            return;
-        }
-        this.estela.material.opacity = 0.85 * intensidad;
-        this.estela.position.copy(this.camara.position);
-        this.estela.quaternion.copy(this.camara.quaternion);
-
-        const arr = this.estela.geometry.attributes.position.array;
-        const velocidad = 38 + 170 * intensidad;
-        const largo = 1.5 + 18 * intensidad;
-        for (let i = 0; i < this.estelaDatos.length; i++) {
-            const d = this.estelaDatos[i];
-            d.z += velocidad * delta;
-            if (d.z > -1.5) {
-                d.z = -85 - Math.random() * 30;
-                const ang = Math.random() * Math.PI * 2;
-                const radio = 2.5 + Math.pow(Math.random(), 0.55) * 24;
-                d.x = Math.cos(ang) * radio;
-                d.y = Math.sin(ang) * radio;
-            }
-            const o = i * 6;
-            arr[o] = d.x; arr[o + 1] = d.y; arr[o + 2] = d.z;
-            arr[o + 3] = d.x; arr[o + 4] = d.y; arr[o + 5] = d.z - largo;
-        }
-        this.estela.geometry.attributes.position.needsUpdate = true;
-
-        const fov = 58 + 14 * intensidad;
-        if (Math.abs(this.camara.fov - fov) > 0.01) {
-            this.camara.fov = fov;
-            this.camara.updateProjectionMatrix();
-        }
     }
 
     /* ---------------------------------------------------------------- POLVO */
@@ -1282,25 +1367,27 @@ export class Recorrido {
         let origenU = this.jeepU;
         let dur = duracion;
         let tipo = 'normal';
-        let datosIntro = null;
 
         if (intro) {
-            const inicio = this._puntoCamino(0);
-            const dir = this._puntoCamino(this.uParada[0]).clone().sub(inicio).setY(0).normalize();
-            const derecha = new THREE.Vector3().crossVectors(dir, UP).normalize();
-            origenU = 0;
-            this.jeepU = 0;
-            if (this.jeep) this.jeep.position.copy(inicio);
+            // El jeep arranca fuera del campamento y entra por el camino.
+            const inicio = this._puntoCamino(U_INTRO_INICIO);
+            const dir = this._marcoCamino(U_INTRO_INICIO).adelante;
+            const derecha = this._marcoCamino(U_INTRO_INICIO).lateral;
+            origenU = U_INTRO_INICIO;
+            this.jeepU = U_INTRO_INICIO;
+            if (this.jeep) {
+                this.jeep.position.copy(inicio);
+                this.jeep.rotation.y = Math.atan2(dir.z, dir.x);
+            }
             origenCam = inicio.clone()
-                .addScaledVector(dir, -19)
-                .addScaledVector(derecha, 5)
-                .add(new THREE.Vector3(0, 10, 0));
-            origenObjetivo = inicio.clone().addScaledVector(dir, 24).add(new THREE.Vector3(0, 4, 0));
+                .addScaledVector(dir, -16.5)
+                .addScaledVector(derecha, 2.6)
+                .add(new THREE.Vector3(0, 6.4, 0));
+            origenObjetivo = inicio.clone().addScaledVector(dir, 13).add(new THREE.Vector3(0, 2.4, 0));
             this.camara.position.copy(origenCam);
             this.controles.target.copy(origenObjetivo);
             tipo = 'intro';
             dur = 9.5;
-            datosIntro = { inicio, dir, derecha };
         } else {
             // Cuanto más lejos el destino, más dura el viaje.
             dur = Math.max(dur, 2.4 + Math.abs(idx - this.destinoActual) * 0.35);
@@ -1319,8 +1406,7 @@ export class Recorrido {
             destinoU,
             destinoAncla,
             intro,
-            tipo,
-            datosIntro
+            tipo
         };
         this.destinoActual = idx;
         this.controles.enabled = false;
@@ -1334,7 +1420,6 @@ export class Recorrido {
         if (!this.introActiva) return;
         this.vuelo = null;
         this.introActiva = false;
-        this._actualizarEstela(0, 0);
         const cuerpo = this.cuerpos[this.destinoActual];
         this.camara.position.copy(this._camaraPara(this.destinoActual));
         this.controles.target.copy(this._objetivo(this.destinoActual));
@@ -1352,38 +1437,59 @@ export class Recorrido {
     _actualizarVuelo(ahora, delta) {
         const v = this.vuelo;
         if (!v) {
-            this._actualizarEstela(delta, 0);
-            return;
+                return;
         }
         const k = clamp01((ahora - v.t0) / (v.dur * 1000));
 
         if (v.tipo === 'intro') {
-            const d = v.datosIntro;
-            const avance = easeOutQuint(clamp01((k - 0.03) / 0.70));
-            const u = v.origenU + (v.destinoU - v.origenU) * avance;
+            // Fase 1 (0 → 0.70): el jeep entra al valle y esquiva obstáculos.
+            // Fase 2 (0.70 → 1): la cámara se abre y encuadra el campamento.
+            const e = easeInOutCubic(clamp01((k - 0.02) / 0.68));
+            const u = v.origenU + (v.destinoU - v.origenU) * e;
             this.jeepU = u;
-            const punto = this._puntoCamino(u);
-            const adelante = this._puntoCamino(Math.min(1, u + 0.006)).sub(punto).setY(0).normalize();
+
+            const { punto, lateral } = this._marcoCamino(u);
+
+            // Tres volantazos suaves. El seno vale +1, -1 y +1 en 1/6, 1/2 y
+            // 5/6 del recorrido: justo donde están las rocas y el tronco.
+            const volantazo = Math.sin(e * Math.PI * 3) * 2.1;
+            const posicion = punto.clone().addScaledVector(lateral, volantazo);
+
+            // Dirección real de avance: tangente + deriva del volantazo.
+            const eAhead = Math.min(1, e + 0.012);
+            const uAhead = v.origenU + (v.destinoU - v.origenU) * eAhead;
+            const marcoAhead = this._marcoCamino(uAhead);
+            const posAhead = marcoAhead.punto.clone()
+                .addScaledVector(marcoAhead.lateral, Math.sin(eAhead * Math.PI * 3) * 2.1);
+            const direccion = posAhead.sub(posicion).setY(0).normalize();
+
+            // Al final se acomoda en el anclaje del campamento.
+            const asentar = easeInOutCubic(clamp01((k - 0.66) / 0.30));
+            posicion.lerp(v.destinoAncla, asentar);
+            const dirFinal = v.destinoObjetivo.clone().sub(v.destinoAncla).setY(0).normalize();
+            const dirMezcla = direccion.clone().lerp(dirFinal, asentar).normalize();
+
             if (this.jeep) {
-                this.jeep.position.copy(punto);
-                this.jeep.rotation.y = Math.atan2(adelante.z, adelante.x);
+                this.jeep.position.copy(posicion);
+                this.jeep.rotation.y = Math.atan2(dirMezcla.z, dirMezcla.x);
             }
 
-            let intensidad = 0;
-            if (k < 0.08) intensidad = k / 0.08;
-            else if (k < 0.52) intensidad = 1;
-            else if (k < 0.80) intensidad = 1 - (k - 0.52) / 0.28;
-            this._actualizarEstela(delta, clamp01(intensidad));
+            // Tierra levantada por las ruedas durante la entrada.
+            if (k < 0.78) this._emitirPolvo(2);
+    
+            // Cámara persecución baja, con un pequeño traqueteo de safari.
+            const sacudida = Math.sin(u * 9.5) * 0.09 + Math.sin(u * 21) * 0.04;
+            const camPersecucion = posicion.clone()
+                .addScaledVector(direccion, -16.5)
+                .addScaledVector(lateral, 2.6)
+                .add(new THREE.Vector3(0, 6.4 + sacudida, 0));
+            const objPersecucion = posicion.clone()
+                .addScaledVector(direccion, 13)
+                .add(new THREE.Vector3(0, 2.4, 0));
 
-            const camSeguimiento = punto.clone()
-                .addScaledVector(adelante, -19)
-                .addScaledVector(d.derecha, 5)
-                .add(new THREE.Vector3(0, 10, 0));
-            const objSeguimiento = punto.clone().addScaledVector(adelante, 24).add(new THREE.Vector3(0, 4, 0));
-            const mezcla = easeInOutCubic(clamp01((k - 0.62) / 0.30));
-
-            this.camara.position.lerpVectors(camSeguimiento, v.destinoCam, mezcla);
-            this.controles.target.lerpVectors(objSeguimiento, v.destinoObjetivo, mezcla);
+            const mezcla = easeInOutCubic(clamp01((k - 0.70) / 0.26));
+            this.camara.position.lerpVectors(camPersecucion, v.destinoCam, mezcla);
+            this.controles.target.lerpVectors(objPersecucion, v.destinoObjetivo, mezcla);
 
             if (k >= 1) {
                 this._terminarVuelo(v);
@@ -1393,7 +1499,6 @@ export class Recorrido {
             return;
         }
 
-        this._actualizarEstela(delta, 0);
         const e = easeInOutCubic(k);
 
         this.camara.position.lerpVectors(v.origenCam, v.destinoCam, e);
@@ -1417,7 +1522,6 @@ export class Recorrido {
     _terminarVuelo(v) {
         this.vuelo = null;
         this.introActiva = false;
-        this._actualizarEstela(0, 0);
         if (this.jeep) {
             this.jeep.position.copy(v.destinoAncla);
             this.jeep.rotation.y = this._giroHacia(v.destinoAncla, v.destinoObjetivo);
@@ -1553,6 +1657,13 @@ export class Recorrido {
             const girando = !!this.vuelo;
             const vel = girando ? (this.vuelo.tipo === 'intro' ? 12 : 7) : 0;
             for (const rueda of this.ruedas) rueda.rotation.z -= vel * delta;
+        } else if (this.jeepCuerpo) {
+            // El jeep GLB es una sola malla: simulamos el traqueteo del
+            // motor con un balanceo suave de la carrocería en movimiento.
+            const vel = this.vuelo ? (this.vuelo.tipo === 'intro' ? 1 : 0.6) : 0;
+            const t = tiempo * 11;
+            this.jeepCuerpo.position.y = Math.sin(t) * 0.05 * vel;
+            this.jeepCuerpo.rotation.x = Math.sin(t * 0.5) * 0.015 * vel;
         }
 
         this.controles.update();
