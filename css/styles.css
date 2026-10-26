@@ -139,7 +139,7 @@ body.intro-activa #app {
     gap: 2px;
     padding: 3px;
     border-radius: 999px;
-    background: rgba(10, 18, 36, 0.8);
+    background: rgba(10, 20, 14, 0.8);
     border: 1px solid var(--line);
 }
 .nivel-switch button {
@@ -178,7 +178,7 @@ body.intro-activa #app {
     padding: 0 11px;
     border-radius: 11px;
     border: 1px solid var(--line);
-    background: rgba(10, 18, 36, 0.72);
+    background: rgba(10, 20, 14, 0.72);
     color: var(--text);
     font-size: 0.8rem;
     font-weight: 600;
@@ -422,7 +422,7 @@ body.intro-activa #app {
     font-size: 0.84rem;
     font-weight: 700;
     border: 1px solid var(--line);
-    background: rgba(16, 27, 50, 0.8);
+    background: rgba(15, 27, 19, 0.8);
     color: var(--text);
     transition: transform 0.15s, background 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
@@ -441,10 +441,10 @@ body.intro-activa #app {
     box-shadow: 0 8px 24px rgba(127, 214, 106, 0.28);
 }
 .btn-primary:hover {
-    background: linear-gradient(135deg, #8ee9ff, #e8fcff);
+    background: linear-gradient(135deg, #b6f59a, #eafce0);
     color: #08120c;
     border-color: transparent;
-    box-shadow: 0 0 0 1px rgba(185, 242, 255, 0.7), 0 10px 32px rgba(127, 214, 106, 0.55);
+    box-shadow: 0 0 0 1px rgba(200, 255, 190, 0.7), 0 10px 32px rgba(127, 214, 106, 0.55);
 }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 
@@ -457,7 +457,7 @@ body.intro-activa #app {
 .dato {
     padding: 10px 11px;
     border-radius: 12px;
-    background: rgba(16, 27, 50, 0.62);
+    background: rgba(15, 27, 19, 0.62);
     border: 1px solid var(--line);
 }
 .dato dt {
@@ -479,12 +479,12 @@ body.intro-activa #app {
     gap: 11px;
     padding: 11px 12px;
     border-radius: 12px;
-    background: rgba(16, 27, 50, 0.6);
+    background: rgba(15, 27, 19, 0.6);
     border: 1px solid var(--line);
 }
 .curiosidad .cur-icon { font-size: 1.35rem; line-height: 1; flex: none; }
 .curiosidad h4 { font-size: 0.86rem; margin-bottom: 3px; color: var(--cyan-soft); }
-.curiosidad p { font-size: 0.81rem; line-height: 1.5; color: #d5e0f0; }
+.curiosidad p { font-size: 0.81rem; line-height: 1.5; color: #dbe6d2; }
 
 /* Quiz */
 .quiz-q { font-size: 0.95rem; font-weight: 700; line-height: 1.45; margin-bottom: 4px; }
@@ -495,7 +495,7 @@ body.intro-activa #app {
     padding: 10px 12px;
     border-radius: 11px;
     border: 1px solid var(--line);
-    background: rgba(16, 27, 50, 0.65);
+    background: rgba(15, 27, 19, 0.65);
     font-size: 0.83rem;
     line-height: 1.35;
     transition: border-color 0.2s, background 0.2s;
@@ -541,7 +541,7 @@ body.intro-activa #app {
     height: 44px;
     border-radius: 50%;
     border: 1px solid var(--line-strong);
-    background: rgba(10, 18, 36, 0.85);
+    background: rgba(10, 20, 14, 0.85);
     color: var(--text);
     font-size: 1rem;
     display: grid;
@@ -577,7 +577,7 @@ body.intro-activa #app {
     padding: 0 11px;
     border-radius: 999px;
     border: 1px solid var(--line);
-    background: rgba(10, 18, 36, 0.78);
+    background: rgba(10, 20, 14, 0.78);
     color: var(--muted);
     font-size: 0.74rem;
     font-weight: 600;
@@ -662,7 +662,7 @@ body.intro-activa #app {
     padding: 0 13px;
     border-radius: 11px;
     border: 1px solid var(--line);
-    background: rgba(16, 27, 50, 0.8);
+    background: rgba(15, 27, 19, 0.8);
     font-size: 0.88rem;
     outline: none;
 }
@@ -716,7 +716,7 @@ body.intro-activa #app {
     padding: 1px 5px;
     border-radius: 5px;
     border: 1px solid var(--line-strong);
-    background: rgba(16, 27, 50, 0.9);
+    background: rgba(15, 27, 19, 0.9);
     font-size: 0.78em;
     text-align: center;
 }
@@ -811,7 +811,7 @@ body.intro-activa #app {
 .intro-sub {
     margin-top: 14px;
     font-size: clamp(0.9rem, 1.5vw, 1.1rem);
-    color: #d6e3f5;
+    color: #dce6d4;
     text-shadow: 0 2px 14px rgba(0, 0, 0, 0.9);
 }
 .intro-bottom { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; pointer-events: none; }
@@ -842,7 +842,7 @@ body.intro-activa #app {
     place-items: center;
     padding: 24px;
     background:
-        radial-gradient(ellipse at 50% 42%, #0b1730 0%, #0c1410 62%);
+        radial-gradient(ellipse at 50% 42%, #0b1710 0%, #0c1410 62%);
     transition: opacity 0.8s ease, visibility 0.8s;
 }
 .loading.oculto { opacity: 0; visibility: hidden; }
@@ -899,7 +899,7 @@ body.intro-activa #app {
     padding: 11px 16px;
     border-radius: 12px;
     border: 1px solid var(--line-strong);
-    background: rgba(10, 18, 36, 0.95);
+    background: rgba(10, 20, 14, 0.95);
     box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
     font-size: 0.83rem;
     line-height: 1.4;
@@ -1042,7 +1042,7 @@ body.intro-activa #app {
         padding: 0 11px;
         border-radius: 10px;
         border: 1px solid var(--line-strong);
-        background: rgba(20, 36, 64, 0.9);
+        background: rgba(14, 30, 20, 0.9);
         color: var(--cyan-soft);
         font-size: 0.72rem;
         font-weight: 700;
