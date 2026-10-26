@@ -80,9 +80,9 @@ async function arrancar() {
         // La miniatura de la tarjeta recién existe cuando se creó el diorama.
         interfaz.render(0);
 
-        interfaz.progreso(0.9, 'Cargando el jeep');
+        interfaz.progreso(0.9, 'Cargando el jeep y los dinosaurios');
         await recorrido.cargarVehiculo((pct) => {
-            interfaz.progreso(0.9 + (pct / 100) * 0.08, `Cargando el jeep: ${pct}%`);
+            interfaz.progreso(0.9 + (pct / 100) * 0.08, `Cargando dinosaurios: ${pct}%`);
         });
 
         interfaz.progreso(1, '¡Todo listo!');

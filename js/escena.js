@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { clone as clonarEsqueleto } from 'three/addons/utils/SkeletonUtils.js';
 import {
     configurarCalidad,
     texturaSuelo,
@@ -119,8 +120,10 @@ export class Recorrido {
         this.volcanes = [];
         this.jeep = null;
         this.ruedas = [];
-        this.trex = null;
-        this.mixer = null;
+        // Modelos animados (T. rex, estegosaurio, triceratops...) y mixers.
+        this.dinos = [];
+        this.mixers = [];
+        this.manadas = [];
         this.vuelo = null;
         this.contadorVuelos = 0;
         this.destinoActual = 0;
@@ -525,10 +528,7 @@ export class Recorrido {
                 largo: 24, alto: 12.5, color: '#6f7f52', vientre: '#bcc08c', fase: 1.1
             }), -3, -9, 2.5));
 
-            registrarCriatura(agregar(crearEstegosaurio({
-                largo: 9, alto: 3.4, color: '#7a7a4e', placas: '#b05f3c', fase: 3.3
-            }), 14, 9, -0.9));
-
+            // El estegosaurio animado lo agrega cargarVehiculo en (14, 9).
             registrarCriatura(agregar(crearBipedo({
                 largo: 9, alto: 3.8, color: '#6b5a4a', vientre: '#c9b48a', cresta: '#a04a3c', fase: 5.2
             }), -17, 8, 1.1));
@@ -581,22 +581,11 @@ export class Recorrido {
         }
 
         if (cuerpo.id === 'cretacico') {
-            // El T. rex llega como modelo animado; acá queda el anclaje.
-            this.anclaTrex = new THREE.Vector3(-2, 0, -6);
-            this.grupoTrex = grupo;
-
-            registrarCriatura(agregar(crearTriceratops({
-                largo: 9, alto: 3.3, color: '#8a7350', escudo: '#ab8a5e', fase: 0.7
-            }), 14, -5, -1.4));
-
+            // T. rex, triceratops, parasaurolophus y la manada de
+            // velocirraptores llegan como modelos animados (cargarVehiculo).
             registrarCriatura(agregar(crearAnquilosaurio({
                 largo: 8, alto: 2.3, color: '#6f6350', blindaje: '#8d7a5e', fase: 2.9
             }), 9, 8, -0.4));
-
-            registrarCriatura(agregar(crearBipedo({
-                largo: 10, alto: 4.4, color: '#5f7a6a', vientre: '#bcc9a8',
-                cresta: '#c4553c', fase: 4.4
-            }), -16, 7, 0.8));
 
             agregar(crearPalmera(9, '#4f7f4a'), -22, 6, 0.6);
             agregar(crearPalmera(7.5, '#588a4e'), 20, -14, 1.9);
@@ -1084,7 +1073,7 @@ export class Recorrido {
     async _cargarJeepGLB(alProgreso) {
         const loader = new GLTFLoader();
         const gltf = await loader.loadAsync('./models/jeep.glb', (xhr) => {
-            if (xhr.total) alProgreso(Math.round((xhr.loaded / xhr.total) * 48));
+            if (xhr.total) alProgreso(Math.round((xhr.loaded / xhr.total) * 40));
         });
         const modelo = gltf.scene;
 
@@ -1141,75 +1130,203 @@ export class Recorrido {
             this._crearJeep();
         }
 
-        // T. rex animado (Quaternius, CC0). Si falla, la parada sigue
-        // funcionando con un tiranosaurio procedural.
-        try {
-            const loader = new GLTFLoader();
-            const gltf = await loader.loadAsync('./models/trex.glb', (xhr) => {
-                if (xhr.total) alProgreso(48 + Math.round((xhr.loaded / xhr.total) * 52));
-            });
-            const modelo = gltf.scene;
+        // Dinosaurios animados (Quaternius, CC0). El jeep ocupa 0-40 % del
+        // progreso y los modelos se reparten el resto. Si alguno falla, esa
+        // parada sigue funcionando con su versión procedural.
+        const dinos = this._listaDinos();
+        const desde = 40;
+        const tramo = 60 / dinos.length;
 
-            // El T. rex viene con skinning: Box3 tiene que medirlo con
-            // "precise" o toma la caja del hueso en bind pose y lo deja
-            // diminuto. Normalizamos a 12 m de largo y apoyado en el suelo.
-            const medir = () => {
-                modelo.updateMatrixWorld(true);
-                return new THREE.Box3().setFromObject(modelo, true);
-            };
+        for (let i = 0; i < dinos.length; i++) {
+            const dino = dinos[i];
+            const base = desde + i * tramo;
+            try {
+                const loader = new GLTFLoader();
+                const gltf = await loader.loadAsync(dino.archivo, (xhr) => {
+                    if (xhr.total) {
+                        alProgreso(Math.round(base + (xhr.loaded / xhr.total) * tramo));
+                    }
+                });
+                this._colocarDino(dino, gltf);
+            } catch (error) {
+                console.warn(`No se pudo cargar ${dino.archivo}, se usa la versión procedural.`, error);
+                this._colocarRespaldo(dino);
+            }
+        }
 
-            let caja = medir();
-            const tamano = caja.getSize(new THREE.Vector3());
-            const escala = 12 / Math.max(tamano.x, tamano.z);
-            modelo.scale.multiplyScalar(escala);
+        alProgreso(100);
+        return true;
+    }
 
-            caja = medir();
-            const centro = caja.getCenter(new THREE.Vector3());
-            modelo.position.x -= centro.x;
-            modelo.position.z -= centro.z;
-            modelo.position.y -= caja.min.y;
+    // Catálogo de modelos animados. "giro" ya incluye el -90° que necesita
+    // el pack (los modelos miran hacia +Z y la escena hacia +X). "puestos"
+    // permite repetir el mismo GLB clonándolo, sin sumar peso.
+    _listaDinos() {
+        const lado = -Math.PI / 2;
+        return [
+            {
+                clave: 'trex',
+                archivo: './models/trex.glb',
+                parada: 'cretacico',
+                largo: 12,
+                animacion: 'idle',
+                puestos: [{ x: -2, z: -6, giro: lado + 0.35 }],
+                respaldo: () => crearBipedo({
+                    largo: 12, alto: 4.6, color: '#6a5a48', vientre: '#c2ad84',
+                    cresta: '#8a3f33', fase: 0.8
+                })
+            },
+            {
+                clave: 'estegosaurio',
+                archivo: './models/stegosaurus.glb',
+                parada: 'jurasico',
+                largo: 9,
+                animacion: 'idle',
+                puestos: [{ x: 14, z: 9, giro: lado + 0.48 }],
+                respaldo: () => crearEstegosaurio({
+                    largo: 9, alto: 3.4, color: '#7a7a4e', placas: '#b05f3c', fase: 3.3
+                })
+            },
+            {
+                clave: 'triceratops',
+                archivo: './models/triceratops.glb',
+                parada: 'cretacico',
+                largo: 9,
+                animacion: 'idle',
+                puestos: [{ x: 6, z: -12, giro: lado + 0.45 }],
+                respaldo: () => crearTriceratops({
+                    largo: 9, alto: 3.3, color: '#8a7350', escudo: '#ab8a5e', fase: 0.7
+                })
+            },
+            {
+                clave: 'parasaurolophus',
+                archivo: './models/parasaurolophus.glb',
+                parada: 'cretacico',
+                largo: 9.5,
+                animacion: 'idle',
+                puestos: [{ x: -8, z: 2, giro: lado + 0.65 }],
+                respaldo: () => crearBipedo({
+                    largo: 10, alto: 4.4, color: '#5f7a6a', vientre: '#bcc9a8',
+                    cresta: '#c4553c', fase: 4.4
+                })
+            },
+            {
+                // Manada: un GLB y tres clones. Patrullan en círculos lentos
+                // para que la parada no se vea congelada.
+                clave: 'velociraptor',
+                archivo: './models/velociraptor.glb',
+                parada: 'cretacico',
+                largo: 2.2,
+                animacion: 'walk',
+                puestos: [
+                    { x: -2, z: 8, giro: lado + 0.4, patrulla: { radio: 1.4, velocidad: 0.22, fase: 0 } },
+                    { x: -5, z: 10.5, giro: lado - 1.1, patrulla: { radio: 1.5, velocidad: 0.26, fase: 2.4 } },
+                    { x: 1, z: 11, giro: lado + 1.9, patrulla: { radio: 1.2, velocidad: 0.19, fase: 4.1 } }
+                ],
+                respaldo: () => crearBipedo({
+                    largo: 2.6, alto: 1.3, color: '#7c5b42', vientre: '#c9b48a', fase: 1.7
+                })
+            }
+        ];
+    }
 
-            modelo.traverse((hijo) => {
-                if (!hijo.isMesh) return;
-                hijo.castShadow = this.calidadAlta;
-                hijo.frustumCulled = false;
-                // El GLB trae metalness 0.4 y sin entorno se ve casi negro.
-                const mats = Array.isArray(hijo.material) ? hijo.material : [hijo.material];
-                for (const mat of mats) {
-                    if (!mat) continue;
-                    mat.metalness = 0;
-                    mat.roughness = 0.85;
-                }
-            });
+    // Normaliza un GLB del pack: escala al largo pedido, lo apoya en el
+    // suelo y corrige los materiales. Vienen con skinning, así que Box3
+    // necesita "precise" o mide el hueso en bind pose y deja todo diminuto.
+    _prepararDino(modelo, largo) {
+        const medir = () => {
+            modelo.updateMatrixWorld(true);
+            return new THREE.Box3().setFromObject(modelo, true);
+        };
+
+        const tamano = medir().getSize(new THREE.Vector3());
+        modelo.scale.multiplyScalar(largo / Math.max(tamano.x, tamano.z));
+
+        const caja = medir();
+        const centro = caja.getCenter(new THREE.Vector3());
+        modelo.position.x -= centro.x;
+        modelo.position.z -= centro.z;
+        modelo.position.y -= caja.min.y;
+
+        modelo.traverse((hijo) => {
+            if (!hijo.isMesh) return;
+            hijo.castShadow = this.calidadAlta;
+            hijo.frustumCulled = false;
+            // El GLB trae metalness 0.4 y sin entorno se ve casi negro.
+            const mats = Array.isArray(hijo.material) ? hijo.material : [hijo.material];
+            for (const mat of mats) {
+                if (!mat) continue;
+                mat.metalness = 0;
+                mat.roughness = 0.85;
+            }
+        });
+
+        return modelo;
+    }
+
+    _colocarDino(dino, gltf) {
+        const grupo = this.paradas[dino.parada];
+        if (!grupo) return;
+
+        dino.puestos.forEach((puesto, indice) => {
+            // Siempre se clona el original intacto: así el segundo puesto no
+            // hereda la escala ni el desplazamiento del primero.
+            const modelo = this._prepararDino(clonarEsqueleto(gltf.scene), dino.largo);
 
             const contenedor = new THREE.Group();
-            contenedor.position.copy(this.anclaTrex);
-            // El modelo mira hacia +Z; lo giramos para verlo de perfil.
-            contenedor.rotation.y = -Math.PI / 2 + 0.35;
+            contenedor.position.set(
+                puesto.x,
+                this._alturaTerreno(grupo.position.x + puesto.x, puesto.z),
+                puesto.z
+            );
+            contenedor.rotation.y = puesto.giro;
             contenedor.add(modelo);
-            this.grupoTrex.add(contenedor);
-            this.trex = contenedor;
+            grupo.add(contenedor);
 
-            if (gltf.animations.length) {
-                this.mixer = new THREE.AnimationMixer(modelo);
-                const idle = gltf.animations.find((a) => /idle/i.test(a.name)) || gltf.animations[0];
-                const accion = this.mixer.clipAction(idle);
-                accion.play();
-                this.accionTrex = accion;
+            // Desfasa el ciclo de cada copia para que no se muevan al unísono.
+            this._animarDino(gltf, modelo, dino.animacion, indice * 0.37);
+
+            if (puesto.patrulla) {
+                this.manadas.push({
+                    objeto: contenedor,
+                    centro: contenedor.position.clone(),
+                    baseX: grupo.position.x,
+                    ...puesto.patrulla
+                });
             }
-        } catch (error) {
-            console.warn('No se pudo cargar trex.glb, se usa un T. rex procedural.', error);
-            const reemplazo = crearBipedo({
-                largo: 12, alto: 4.6, color: '#6a5a48', vientre: '#c2ad84',
-                cresta: '#8a3f33', fase: 0.8
-            });
-            reemplazo.position.copy(this.anclaTrex);
-            reemplazo.rotation.y = -0.4;
-            this.grupoTrex.add(reemplazo);
-            this.trex = reemplazo;
-            this.criaturas.push(reemplazo);
+
+            this.dinos.push({ clave: dino.clave, objeto: contenedor });
+        });
+    }
+
+    _animarDino(gltf, modelo, nombre = 'idle', desfase = 0) {
+        if (!gltf.animations.length) return null;
+        const mixer = new THREE.AnimationMixer(modelo);
+        const clip = gltf.animations.find((a) => new RegExp(nombre, 'i').test(a.name))
+            || gltf.animations[0];
+        const accion = mixer.clipAction(clip);
+        accion.play();
+        accion.time = (desfase + Math.random() * 0.5) * clip.duration;
+        this.mixers.push(mixer);
+        return { mixer, accion };
+    }
+
+    _colocarRespaldo(dino) {
+        const grupo = this.paradas[dino.parada];
+        if (!grupo || !dino.respaldo) return;
+        for (const puesto of dino.puestos) {
+            const objeto = dino.respaldo();
+            objeto.position.set(
+                puesto.x,
+                this._alturaTerreno(grupo.position.x + puesto.x, puesto.z),
+                puesto.z
+            );
+            // Las criaturas procedurales miran hacia +X: se les resta el
+            // cuarto de vuelta que sí necesitan los GLB.
+            objeto.rotation.y = puesto.giro + Math.PI / 2;
+            grupo.add(objeto);
+            if (objeto.userData.animar) this.criaturas.push(objeto);
         }
-        return true;
     }
 
     /* --------------------------------------------------------- ENCUADRE */
@@ -1586,7 +1703,22 @@ export class Recorrido {
         this._actualizarPaleta(delta);
         this._actualizarPolvo(delta);
 
-        if (this.mixer) this.mixer.update(delta);
+        if (this.mixers.length) {
+            for (const mixer of this.mixers) mixer.update(delta);
+        }
+
+        // La manada de velocirraptores patrulla en círculos lentos.
+        for (const manada of this.manadas) {
+            const ang = tiempo * manada.velocidad + manada.fase;
+            manada.objeto.position.x = manada.centro.x + Math.cos(ang) * manada.radio;
+            manada.objeto.position.z = manada.centro.z + Math.sin(ang) * manada.radio;
+            manada.objeto.position.y = this._alturaTerreno(
+                manada.baseX + manada.objeto.position.x,
+                manada.objeto.position.z
+            );
+            // Mira hacia donde camina (tangente de la circunferencia).
+            manada.objeto.rotation.y = -ang;
+        }
 
         for (const criatura of this.criaturas) {
             if (criatura.userData.animar) criatura.userData.animar(tiempo);

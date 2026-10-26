@@ -36,20 +36,31 @@ Parámetros útiles para probar:
 index.html          Estructura de la interfaz, intro y guía docente
 css/styles.css      Estilos responsive (paleta verde/ámbar)
 js/datos.js         Las 4 paradas, glosario y banco de preguntas
-js/escena.js        Valle, camino, jeep, T. rex, paletas y cámara
+js/escena.js        Valle, camino, jeep, dinosaurios animados, paletas y cámara
 js/vida.js          Dinosaurios y vegetación low-poly procedurales
 js/texturas.js      Texturas dibujadas en canvas
 js/interfaz.js      Ficha, ruta, quiz, voz, glosario, guía e impresión
 js/main.js          Arranque, calidad y progreso de carga
 models/trex.glb     T. rex animado (Quaternius, CC0)
+models/triceratops.glb      Triceratops animado (Quaternius, CC0)
+models/stegosaurus.glb      Stegosaurus animado (Quaternius, CC0)
+models/velociraptor.glb     Velociraptor animado (Quaternius, CC0)
+models/parasaurolophus.glb  Parasaurolophus animado (Quaternius, CC0)
 models/jeep.glb     Jeep safari (Zsky, CC-BY)
-vendor/three/       Three.js r-local
+vendor/three/       Three.js r160 + GLTFLoader, OrbitControls y SkeletonUtils
+scripts/peso.mjs    Control de peso antes de desplegar
 ```
 
 ## Créditos
 
-- **T. rex animado**: [Quaternius](https://quaternius.com/) vía
-  [Poly Pizza](https://poly.pizza/m/UYtneO5FpF), licencia CC0.
+- **Dinosaurios animados** (T. rex, Triceratops, Stegosaurus, Parasaurolophus y
+  Velociraptor): [Quaternius](https://quaternius.com/) vía Poly Pizza, licencia
+  CC0.
+  - [T. rex](https://poly.pizza/m/UYtneO5FpF) ·
+    [Triceratops](https://poly.pizza/m/IGvrUqGrRM) ·
+    [Stegosaurus](https://poly.pizza/m/eFcNbOlpvl) ·
+    [Velociraptor](https://poly.pizza/m/cnlGH2UcDd) ·
+    [Parasaurolophus](https://poly.pizza/m/KeeQrrouRK)
 - **Jeep safari**: [Zsky](https://poly.pizza/u/Zsky) vía
   [Poly Pizza](https://poly.pizza/m/AcSdGGrgYP), licencia CC-BY (atribución
   requerida; se acredita acá y en la guía docente del sitio).
