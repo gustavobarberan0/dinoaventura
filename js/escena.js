@@ -214,10 +214,76 @@ export class Recorrido {
 
         this._crearCielo();
         this._crearPolvo();
+        this._crearPost();
 
         window.addEventListener('resize', () => this.actualizarTamano());
         this.actualizarTamano();
         this.animar();
+    }
+
+    /* ------------------------------------------------------------- POST */
+    // Capa final sobre el render: viñeta suave y grano de película. No toca el
+    // color de la escena (los materiales ya traen su tone mapping), así el
+    // aspecto no cambia: solo se apoya la imagen.
+    _crearPost() {
+        this.postEscena = new THREE.Scene();
+        this.postCamara = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+        this.postUniformes = {
+            resolucion: { value: new THREE.Vector2(1, 1) },
+            tiempo: { value: 0 },
+            vineta: { value: 0.26 },
+            grano: { value: 0.05 },
+            calidez: { value: 0.018 }
+        };
+
+        const geometria = new THREE.PlaneGeometry(2, 2);
+        const vertexShader = `
+            varying vec2 vUv;
+            void main() {
+                vUv = uv;
+                gl_Position = vec4(position.xy, 0.0, 1.0);
+            }
+        `;
+
+        const matPost = new THREE.ShaderMaterial({
+            uniforms: this.postUniformes,
+            vertexShader,
+            fragmentShader: `
+                uniform float vineta;
+                uniform float grano;
+                uniform float tiempo;
+                uniform float calidez;
+                uniform vec2 resolucion;
+                varying vec2 vUv;
+
+                float ruido(vec2 p) {
+                    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+                }
+
+                void main() {
+                    // Viñeta en el alfa y grano cálido en el color: con
+                    // blendSrc = One y blendDst = OneMinusSrcAlpha se resuelve
+                    // en un solo pase.
+                    vec2 centro = vUv - 0.5;
+                    float dist = length(centro * vec2(1.0, 0.92));
+                    float a = vineta * smoothstep(0.36, 0.90, dist);
+
+                    float g = (ruido(vUv * resolucion + tiempo * 60.0) - 0.5) * grano;
+                    vec3 calido = vec3(calidez, calidez * 0.6, 0.0);
+                    gl_FragColor = vec4(max(vec3(g) + calido, 0.0), a);
+                }
+            `,
+            transparent: true,
+            blending: THREE.CustomBlending,
+            blendEquation: THREE.AddEquation,
+            blendSrc: THREE.OneFactor,
+            blendDst: THREE.OneMinusSrcAlphaFactor,
+            depthTest: false,
+            depthWrite: false
+        });
+
+        this.postEscena.add(new THREE.Mesh(geometria, matPost));
+        this.postUniformes.resolucion.value.set(window.innerWidth, window.innerHeight);
     }
 
     /* ------------------------------------------------------------- CIELO */
@@ -2047,6 +2113,10 @@ export class Recorrido {
         }
         this.camara.updateProjectionMatrix();
         this.renderer.setSize(ancho, alto);
+
+        if (this.postUniformes) {
+            this.postUniformes.resolucion.value.set(ancho, alto);
+        }
     }
 
     /* ------------------------------------------------------------- ANIMAR */
@@ -2160,5 +2230,11 @@ export class Recorrido {
 
         this.controles.update();
         this.renderer.render(this.escena, this.camara);
+        if (this.postActivo !== false) {
+            this.renderer.autoClear = false;
+            this.postUniformes.tiempo.value = tiempo;
+            this.renderer.render(this.postEscena, this.postCamara);
+            this.renderer.autoClear = true;
+        }
     }
 }

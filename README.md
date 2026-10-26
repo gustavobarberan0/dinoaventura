@@ -13,6 +13,8 @@ que se recorre en jeep.
 - **Entorno con atmósfera**: cielo por shader (sol, halo y nubes en movimiento),
   pasto, piedritas y hojas instanciados, laguna con ondas y espuma, y polen
   suspendido en cada era. Todo procedural: no suma archivos.
+- **Acabado de imagen**: viñeta y grano de película en un pase propio, sin
+  dependencias externas.
 
 ## Cómo abrirlo
 
