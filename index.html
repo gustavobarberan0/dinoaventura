@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0c1410">
+    <meta name="description" content="Dinoaventura: un safari 3D por el Mesozoico para escuelas primarias. Cuatro paradas, dos niveles de lectura, quiz y guía docente.">
+    <title>Dinoaventura · Safari por el Mesozoico</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="css/styles.css?v=1">
+</head>
+<body>
+
+    <!-- ============================ ESCENA 3D ============================ -->
+    <div id="canvas-container" aria-hidden="true"></div>
+    <div class="scene-vignette" aria-hidden="true"></div>
+
+    <!-- ============================ CARGA ============================ -->
+    <div id="loading" class="loading">
+        <div class="loading-card">
+            <div class="loading-logo" aria-hidden="true">🦕</div>
+            <h1>DINOAVENTURA</h1>
+            <p class="loading-sub">Preparando el safari prehistórico…</p>
+            <div class="loading-bar"><span id="loadProgress"></span></div>
+            <p class="loading-status" id="loadStatus">Iniciando el jeep</p>
+            <p class="loading-note">Funciona sin internet · Pensado para escuelas primarias</p>
+        </div>
+    </div>
+
+    <!-- ============================ INTRO ============================ -->
+    <div id="introOverlay" class="intro-overlay" aria-hidden="true">
+        <div class="intro-top">
+            <p class="intro-kicker">EXPEDICIÓN · DINOAVENTURA</p>
+            <h2>Viajando al<br>Mesozoico</h2>
+            <p class="intro-sub">Ajustá el cinturón: vamos a recorrer 186 millones de años.</p>
+        </div>
+        <div class="intro-bottom">
+            <button id="btnSkipIntro" class="btn btn-primary">Saltar introducción →</button>
+            <div class="intro-meter"><span id="introMeter"></span></div>
+        </div>
+    </div>
+
+    <!-- ============================ APLICACIÓN ============================ -->
+    <div id="app">
+
+        <!-- ------------------------------ BARRA ------------------------------ -->
+        <header class="topbar">
+            <div class="brand">
+                <span class="brand-mark" aria-hidden="true">🦖</span>
+                <div class="brand-text">
+                    <h1>Dinoaventura</h1>
+                    <p>Un safari por el Mesozoico · Primaria</p>
+                </div>
+            </div>
+
+            <div class="top-actions">
+                <div class="nivel-switch" role="group" aria-label="Nivel de lectura">
+                    <button type="button" data-nivel="exploradores" class="active" aria-pressed="true">
+                        🔭 <span>Exploradores</span> <small>6-9</small>
+                    </button>
+                    <button type="button" data-nivel="cientificos" aria-pressed="false">
+                        🥽 <span>Científicos</span> <small>10-12</small>
+                    </button>
+                </div>
+
+                <button type="button" id="btnAuto" class="icon-btn" aria-pressed="false" title="Recorrido automático (P)">
+                    <span aria-hidden="true">▶</span><span class="icon-label">Auto</span>
+                </button>
+                <button type="button" id="btnGuia" class="icon-btn" title="Guía docente">
+                    <span aria-hidden="true">👩‍🏫</span><span class="icon-label">Guía</span>
+                </button>
+                <button type="button" id="btnGlosario" class="icon-btn" title="Glosario">
+                    <span aria-hidden="true">📖</span><span class="icon-label">Glosario</span>
+                </button>
+                <button type="button" id="btnDesafio" class="icon-btn icon-btn-accent" title="Desafío de preguntas">
+                    <span aria-hidden="true">🏆</span><span class="icon-label">Desafío</span>
+                </button>
+                <button type="button" id="btnFullscreen" class="icon-btn icon-btn-square" title="Pantalla completa" aria-label="Pantalla completa">
+                    <span aria-hidden="true">⛶</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- ------------------------------ ESCENARIO ------------------------------ -->
+        <main class="stage">
+            <aside id="panel" class="panel" aria-label="Información de la parada">
+                <div class="panel-head">
+                    <div class="badge-wrap">
+                        <div class="badge" id="badge">
+                            <span class="badge-emoji" id="badgeEmoji">🌋</span>
+                        </div>
+                        <div class="badge-shine" aria-hidden="true"></div>
+                    </div>
+                    <div class="panel-titles">
+                        <p class="eyebrow" id="pEyebrow">Parada 1 de 4 · Período</p>
+                        <h2 id="pNombre">Triásico</h2>
+                        <p class="tagline" id="pTagline">Donde aparecieron los primeros dinosaurios.</p>
+                    </div>
+                    <button type="button" id="btnPanelToggle" class="panel-toggle"
+                            aria-expanded="true" aria-controls="panelTabs panelBody"
+                            aria-label="Minimizar la ficha para ver mejor la escena"
+                            title="Minimizar la ficha">
+                        <span class="pt-icon" aria-hidden="true">▾</span>
+                        <span class="pt-text">Minimizar</span>
+                    </button>
+                </div>
+
+                <div class="tabs" id="panelTabs" role="tablist" aria-label="Secciones de la ficha">
+                    <button type="button" role="tab" id="tab-ficha" aria-controls="panel-ficha" aria-selected="true" data-tab="ficha">Ficha</button>
+                    <button type="button" role="tab" id="tab-datos" aria-controls="panel-datos" aria-selected="false" data-tab="datos" tabindex="-1">Datos</button>
+                    <button type="button" role="tab" id="tab-curiosidades" aria-controls="panel-curiosidades" aria-selected="false" data-tab="curiosidades" tabindex="-1">Curiosidades</button>
+                    <button type="button" role="tab" id="tab-quiz" aria-controls="panel-quiz" aria-selected="false" data-tab="quiz" tabindex="-1">Quiz</button>
+                </div>
+
+                <div class="panel-body" id="panelBody">
+                    <section role="tabpanel" id="panel-ficha" aria-labelledby="tab-ficha" data-panel="ficha" class="tab-panel active">
+                        <p class="desc" id="pDesc"></p>
+                        <div class="sabias" id="pSabias"></div>
+                        <div class="comparacion" id="pComparacion"></div>
+                        <div class="chips-label">Conceptos de esta parada</div>
+                        <div class="chips" id="pGlosario"></div>
+                        <div class="panel-actions">
+                            <button type="button" id="btnEscuchar" class="btn btn-soft">🔊 Escuchar</button>
+                            <button type="button" id="btnImprimir" class="btn btn-soft">🖨️ Imprimir ficha</button>
+                        </div>
+                    </section>
+
+                    <section role="tabpanel" id="panel-datos" aria-labelledby="tab-datos" data-panel="datos" class="tab-panel" hidden>
+                        <dl class="datos-grid" id="pDatos"></dl>
+                    </section>
+
+                    <section role="tabpanel" id="panel-curiosidades" aria-labelledby="tab-curiosidades" data-panel="curiosidades" class="tab-panel" hidden>
+                        <div class="curiosidades" id="pCuriosidades"></div>
+                    </section>
+
+                    <section role="tabpanel" id="panel-quiz" aria-labelledby="tab-quiz" data-panel="quiz" class="tab-panel" hidden>
+                        <div id="pQuiz" class="quiz"></div>
+                    </section>
+                </div>
+            </aside>
+        </main>
+
+        <!-- ------------------------------ RUTA ------------------------------ -->
+        <footer class="route" aria-label="Ruta del recorrido">
+            <button type="button" id="btnPrev" class="route-arrow" aria-label="Parada anterior">❮</button>
+            <div class="route-track" id="routeTrack" role="tablist" aria-label="Paradas"></div>
+            <button type="button" id="btnNext" class="route-arrow" aria-label="Parada siguiente">❯</button>
+        </footer>
+    </div>
+
+    <!-- ============================ MODAL: GLOSARIO ============================ -->
+    <div id="modalGlosario" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="tituloGlosario">
+        <div class="modal-card">
+            <div class="modal-head">
+                <h2 id="tituloGlosario">📖 Glosario prehistórico</h2>
+                <button type="button" class="modal-close" data-close aria-label="Cerrar">✕</button>
+            </div>
+            <div class="modal-tools">
+                <input type="search" id="glosarioBuscar" placeholder="Buscar una palabra…" aria-label="Buscar en el glosario">
+            </div>
+            <div class="modal-body" id="glosarioLista"></div>
+        </div>
+    </div>
+
+    <!-- ============================ MODAL: GUÍA DOCENTE ============================ -->
+    <div id="modalGuia" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="tituloGuia">
+        <div class="modal-card">
+            <div class="modal-head">
+                <h2 id="tituloGuia">👩‍🏫 Guía docente</h2>
+                <button type="button" class="modal-close" data-close aria-label="Cerrar">✕</button>
+            </div>
+            <div class="modal-body guia">
+                <p class="guia-intro">Esta guía propone un uso del safari en el aula de primaria, sin necesidad de internet ni de instalar nada. Está pensada para sesiones de 30 a 50 minutos.</p>
+
+                <button type="button" id="btnRepetirIntro" class="btn btn-primary guia-repetir">🦖 Repetir la intro</button>
+
+                <h3>🎯 Objetivos de aprendizaje</h3>
+                <ul>
+                    <li>Ubicar el Triásico, el Jurásico y el Cretácico en la era Mesozoica.</li>
+                    <li>Reconocer grupos de dinosaurios: saurópodos, terópodos y ornitisquios.</li>
+                    <li>Entender que las aves son dinosaurios y que los pterosaurios no lo eran.</li>
+                    <li>Relacionar el impacto de un asteroide con la extinción de hace 66 millones de años.</li>
+                    <li>Usar vocabulario científico (fósil, mesozoico, extinción masiva) en explicaciones orales.</li>
+                </ul>
+
+                <h3>🧭 Cómo usarlo en clase</h3>
+                <div class="guia-pasos">
+                    <div class="guia-paso">
+                        <span>1</span>
+                        <div><b>Antes (10 min).</b> Preguntá: “¿Qué dinosaurios conocen?”, “¿Todos vivieron juntos?”, “¿Qué pasó con ellos?”. Anotá las ideas en el pizarrón para volver a ellas al final.</div>
+                    </div>
+                    <div class="guia-paso">
+                        <span>2</span>
+                        <div><b>Durante (20 min).</b> Proyectá el recorrido. Avanzá parada por parada y usá <b>Escuchar</b> para la lectura en voz alta. En cada diorama, pedí que observen el ambiente, las plantas y cómo se mueven los animales.</div>
+                    </div>
+                    <div class="guia-paso">
+                        <span>3</span>
+                        <div><b>Después (15 min).</b> Jueguen al <b>Desafío</b>, impriman una ficha por grupo y armen una línea de tiempo del Mesozoico con dibujos.</div>
+                    </div>
+                </div>
+
+                <h3>🧑‍🏫 Actividades por ciclo</h3>
+                <div class="guia-columnas">
+                    <div>
+                        <h4>Primer ciclo (6 a 9 años)</h4>
+                        <ul>
+                            <li>Nombrar los tres períodos en orden.</li>
+                            <li>Comparar tamaños: “¿Cuántas personas entran en un Brachiosaurus?”.</li>
+                            <li>Dibujar el dinosaurio favorito y dictar una característica.</li>
+                            <li>Escuchar la ficha y repetir el dato más sorprendente.</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4>Segundo ciclo (10 a 12 años)</h4>
+                        <ul>
+                            <li>Armar una tabla con período, clima, plantas y dinosaurios.</li>
+                            <li>Explicar por qué las aves son dinosaurios y los pterosaurios no.</li>
+                            <li>Relacionar el tamaño del asteroide con el cráter de Chicxulub.</li>
+                            <li>Debatir: ¿qué habría pasado si el asteroide hubiera caído en el océano?</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <h3>💬 Preguntas para conversar</h3>
+                <ul class="guia-preguntas">
+                    <li>¿Por qué los dinosaurios no vivieron todos en la misma época?</li>
+                    <li>¿Qué diferencia a un dinosaurio de un cocodrilo o de un pterosaurio?</li>
+                    <li>¿Cómo sabemos que algunos dinosaurios tenían plumas?</li>
+                    <li>¿Por qué sobrevivieron las aves y no el T. rex?</li>
+                    <li>¿Qué pruebas dejan los fósiles sobre cómo vivían?</li>
+                    <li>¿Los dinosaurios se extinguieron “de un día para el otro”?</li>
+                </ul>
+
+                <h3>📏 Actividad estrella: la línea de tiempo a escala</h3>
+                <p>Si 1 metro representara 1 millón de años, la era Mesozoica ocuparía 186 metros: casi dos cuadras. El Triásico empezaría en el extremo, el Jurásico a los 51 metros y el Cretácico a los 107. La extinción ocurriría en el último centímetro. Pedí a los estudiantes que marquen esa línea en el patio con tizas.</p>
+
+                <h3>✅ Evaluación sugerida</h3>
+                <ul>
+                    <li><b>En proceso:</b> nombra los tres períodos y reconoce al menos tres dinosaurios.</li>
+                    <li><b>Logrado:</b> explica en qué se diferencian un saurópodo y un terópodo, y qué pasó al final del Cretácico.</li>
+                    <li><b>Avanzado:</b> justifica con evidencia por qué las aves son dinosaurios y por qué los pterosaurios no.</li>
+                </ul>
+
+                <h3>🖨️ Materiales</h3>
+                <p>Cada parada tiene un botón <b>Imprimir ficha</b> que genera una hoja con la descripción, los datos, las curiosidades y el quiz con respuestas. Ideal para trabajar sin pantallas o para dejar tarea.</p>
+
+                <h3>⚙️ Notas técnicas</h3>
+                <ul>
+                    <li>Funciona sin internet: Three.js y el modelo del T. rex están dentro del proyecto.</li>
+                    <li>En computadoras antiguas, abrí el enlace con <code>?calidad=baja</code> para aligerar la escena.</li>
+                    <li>Teclas: <kbd>←</kbd> <kbd>→</kbd> cambian de parada, <kbd>P</kbd> activa el recorrido automático, <kbd>M</kbd> pliega la ficha, <kbd>Esc</kbd> cierra ventanas.</li>
+                    <li>La voz utiliza el sintetizador del sistema operativo; si no hay voces en español, el botón se desactiva.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================ MODAL: DESAFÍO ============================ -->
+    <div id="modalDesafio" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="tituloDesafio">
+        <div class="modal-card">
+            <div class="modal-head">
+                <h2 id="tituloDesafio">🏆 Desafío prehistórico</h2>
+                <button type="button" class="modal-close" data-close aria-label="Cerrar">✕</button>
+            </div>
+            <div class="modal-body" id="desafioCuerpo"></div>
+        </div>
+    </div>
+
+    <!-- ============================ AVISOS ============================ -->
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <noscript>
+        <div class="noscript">Este safari necesita JavaScript activado para mostrar el Mesozoico en 3D.</div>
+    </noscript>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "./vendor/three/three.module.min.js",
+                "three/addons/": "./vendor/three/addons/"
+            }
+        }
+    </script>
+    <script type="module" src="js/main.js?v=1"></script>
+</body>
+</html>
