@@ -86,6 +86,50 @@ export function texturaSuelo() {
     return aTextura(canvas, 46);
 }
 
+/* ---------------------------------------------------------------- PASTO */
+// Mata de pasto: unas briznas recortadas sobre fondo transparente. Se usa en
+// planos cruzados instanciados, así el suelo gana silueta sin sumar mallas.
+export function texturaPasto() {
+    const lado = 128;
+    const canvas = lienzo(lado, lado);
+    const ctx = canvas.getContext('2d');
+    const rand = sembrado(315742);
+
+    ctx.clearRect(0, 0, lado, lado);
+
+    const briznas = 12;
+    for (let i = 0; i < briznas; i++) {
+        const baseX = lado * (0.08 + rand() * 0.84);
+        const alto = lado * (0.40 + rand() * 0.55);
+        const inclinacion = (rand() - 0.5) * lado * 0.34;
+        const ancho = 1.5 + rand() * 2.4;
+        const verde = 150 + Math.floor(rand() * 72);
+
+        const grad = ctx.createLinearGradient(0, lado, 0, lado - alto);
+        grad.addColorStop(0, `rgb(${Math.floor(verde * 0.55)}, ${Math.floor(verde * 0.72)}, ${Math.floor(verde * 0.38)})`);
+        grad.addColorStop(1, `rgb(${Math.floor(verde * 0.95)}, ${Math.min(255, verde + 46)}, ${Math.floor(verde * 0.62)})`);
+        ctx.fillStyle = grad;
+
+        ctx.beginPath();
+        ctx.moveTo(baseX - ancho, lado);
+        ctx.quadraticCurveTo(
+            baseX - ancho * 0.6 + inclinacion * 0.4, lado - alto * 0.55,
+            baseX + inclinacion, lado - alto
+        );
+        ctx.quadraticCurveTo(
+            baseX + ancho * 0.6 + inclinacion * 0.4, lado - alto * 0.5,
+            baseX + ancho, lado
+        );
+        ctx.closePath();
+        ctx.fill();
+    }
+
+    const textura = new THREE.CanvasTexture(canvas);
+    textura.colorSpace = THREE.SRGBColorSpace;
+    textura.anisotropy = calidadAlta ? 4 : 1;
+    return textura;
+}
+
 export function texturaCamino() {
     const lado = calidadAlta ? 256 : 128;
     const canvas = lienzo(lado, lado);

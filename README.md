@@ -10,6 +10,9 @@ que se recorre en jeep.
 - **Rigor científico**: pterosaurios y reptiles marinos no son dinosaurios; las
   aves sí son dinosaurios; la extinción K-Pg se explica con el impacto de
   Chicxulub.
+- **Entorno con atmósfera**: cielo por shader (sol, halo y nubes en movimiento),
+  pasto, piedritas y hojas instanciados, laguna con ondas y espuma, y polen
+  suspendido en cada era. Todo procedural: no suma archivos.
 
 ## Cómo abrirlo
 

@@ -6,6 +6,7 @@
    ===================================================================== */
 
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 /* ------------------------------------------------------------- MATERIALES */
 const cacheMateriales = new Map();
@@ -65,6 +66,63 @@ function ojos(grupo, x, y, z, radio, separacion) {
         ojo.position.set(x, y, z + lado * separacion);
         grupo.add(ojo);
     }
+}
+
+/* -------------------------------------------------------------- FUSIÓN */
+// Convierte un grupo de mallas estáticas (plantas, rocas, troncos) en una
+// sola malla con colores por vértice. Mismo aspecto, muchas menos llamadas
+// de dibujo: la escena tenía más de 500 y casi todas eran hojas y troncos.
+const materialFusionado = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    roughness: 0.92,
+    metalness: 0,
+    flatShading: true
+});
+
+export function fusionar(grupo) {
+    grupo.updateMatrixWorld(true);
+    const partes = [];
+
+    grupo.traverse((hijo) => {
+        if (!hijo.isMesh || !hijo.geometry) return;
+        const geo = hijo.geometry.clone();
+        geo.applyMatrix4(hijo.matrixWorld);
+
+        for (const nombre of Object.keys(geo.attributes)) {
+            if (nombre !== 'position' && nombre !== 'normal' && nombre !== 'uv') {
+                geo.deleteAttribute(nombre);
+            }
+        }
+        if (!geo.attributes.uv) {
+            const cantidad = geo.attributes.position.count;
+            geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(cantidad * 2), 2));
+        }
+
+        const color = hijo.material && hijo.material.color
+            ? hijo.material.color
+            : new THREE.Color(1, 1, 1);
+        const cantidad = geo.attributes.position.count;
+        const colores = new Float32Array(cantidad * 3);
+        for (let i = 0; i < cantidad; i++) {
+            colores[i * 3] = color.r;
+            colores[i * 3 + 1] = color.g;
+            colores[i * 3 + 2] = color.b;
+        }
+        geo.setAttribute('color', new THREE.BufferAttribute(colores, 3));
+        partes.push(geo);
+    });
+
+    if (!partes.length) return grupo;
+    const fusionada = mergeGeometries(partes, false);
+    if (!fusionada) return grupo;
+
+    const mallaUnica = new THREE.Mesh(fusionada, materialFusionado);
+    mallaUnica.castShadow = true;
+    mallaUnica.receiveShadow = false;
+
+    const salida = new THREE.Group();
+    salida.add(mallaUnica);
+    return salida;
 }
 
 /* =====================================================================
@@ -694,16 +752,26 @@ export function crearPterosaurio({
    ===================================================================== */
 export function crearConifera(alto = 12, color = '#3f5f38') {
     const grupo = new THREE.Group();
-    const tronco = cilindro(alto * 0.018, alto * 0.035, alto * 0.55, '#5a4230', 6);
-    tronco.position.y = alto * 0.275;
+    const tronco = cilindro(alto * 0.016, alto * 0.042, alto * 0.60, '#5a4230', 6);
+    tronco.position.y = alto * 0.30;
     grupo.add(tronco);
-    for (let i = 0; i < 4; i++) {
-        const f = i / 4;
-        const copa = cono(alto * (0.20 - f * 0.035), alto * 0.34, color, 7);
-        copa.position.y = alto * (0.45 + f * 0.15);
+
+    // Seis capas con radios y giros irregulares: la silueta deja de ser un
+    // cono perfecto apilado y se parece más a una conífera.
+    const capas = 6;
+    const base = new THREE.Color(color);
+    for (let i = 0; i < capas; i++) {
+        const f = i / (capas - 1);
+        const jitter = 0.92 + ((i * 37) % 11) / 60;
+        const radio = alto * (0.21 - f * 0.15) * jitter;
+        const alturaCapa = alto * (0.22 + f * 0.06);
+        const tono = base.clone().multiplyScalar(0.86 + f * 0.30);
+        const copa = cono(radio, alturaCapa, `#${tono.getHexString()}`, 8);
+        copa.position.y = alto * (0.34 + f * 0.50);
+        copa.rotation.y = i * 0.9;
         grupo.add(copa);
     }
-    return grupo;
+    return fusionar(grupo);
 }
 
 export function crearHelecho(escala = 1, color = '#4f7a3f') {
@@ -716,7 +784,7 @@ export function crearHelecho(escala = 1, color = '#4f7a3f') {
         hoja.rotation.z = 0.45;
         grupo.add(hoja);
     }
-    return grupo;
+    return fusionar(grupo);
 }
 
 export function crearCicada(alto = 2.2, color = '#4c7a44') {
@@ -732,7 +800,7 @@ export function crearCicada(alto = 2.2, color = '#4c7a44') {
         hoja.rotation.z = 0.35;
         grupo.add(hoja);
     }
-    return grupo;
+    return fusionar(grupo);
 }
 
 export function crearPalmera(alto = 8, color = '#4f7f4a') {
@@ -756,7 +824,7 @@ export function crearPalmera(alto = 8, color = '#4f7f4a') {
         copa.add(hoja);
     }
     grupo.add(copa);
-    return grupo;
+    return fusionar(grupo);
 }
 
 export function crearRoca(escala = 1, color = '#8a8175') {
@@ -781,7 +849,7 @@ export function crearFlor(color = '#e0c84a') {
         petalo.rotation.y = -ang;
         grupo.add(petalo);
     }
-    return grupo;
+    return fusionar(grupo);
 }
 
 export function crearTroncoMuerto(alto = 6, color = '#5a4a3c') {
@@ -796,5 +864,5 @@ export function crearTroncoMuerto(alto = 6, color = '#5a4a3c') {
         alto * 0.03, alto * 0.015, color, 5
     );
     grupo.add(rama);
-    return grupo;
+    return fusionar(grupo);
 }

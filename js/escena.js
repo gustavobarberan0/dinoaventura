@@ -9,11 +9,12 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { clone as clonarEsqueleto } from 'three/addons/utils/SkeletonUtils.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
     configurarCalidad,
     texturaSuelo,
     texturaCamino,
-    texturaAgua,
+    texturaPasto,
     texturaParticula
 } from './texturas.js';
 import {
@@ -69,25 +70,29 @@ const PALETAS = {
         arriba: '#8fb6d8', abajo: '#f4d3a2', niebla: '#e3c69c',
         sol: '#fff0cc', intensidad: 2.8,
         cieloHemi: '#e2f0ff', sueloHemi: '#b58a5e',
-        suelo: '#c8a070'
+        suelo: '#c8a070',
+        nube: '#f7e6cd', cobertura: 0.36
     },
     jurasico: {
         arriba: '#5a9bd8', abajo: '#d8eec0', niebla: '#b6d4a0',
         sol: '#fff6d8', intensidad: 2.9,
         cieloHemi: '#e2f4ff', sueloHemi: '#5a7a45',
-        suelo: '#6f9c52'
+        suelo: '#6f9c52',
+        nube: '#fbfdff', cobertura: 0.52
     },
     cretacico: {
         arriba: '#5e93c4', abajo: '#f4dbaa', niebla: '#d8c298',
         sol: '#fff0c4', intensidad: 2.8,
         cieloHemi: '#fff0d8', sueloHemi: '#8a7a4c',
-        suelo: '#a8ae66'
+        suelo: '#a8ae66',
+        nube: '#f9ecd6', cobertura: 0.44
     },
     extincion: {
         arriba: '#2e2540', abajo: '#8a4a3e', niebla: '#57403f',
         sol: '#ff9a6a', intensidad: 1.15,
         cieloHemi: '#96747f', sueloHemi: '#463830',
-        suelo: '#786660'
+        suelo: '#786660',
+        nube: '#7a4e46', cobertura: 0.82
     }
 };
 
@@ -117,6 +122,7 @@ export class Recorrido {
         this.pajaros = [];
         this.humos = [];
         this.agua = null;
+        this.motes = [];
         this.volcanes = [];
         this.jeep = null;
         this.ruedas = [];
@@ -138,10 +144,12 @@ export class Recorrido {
             niebla: new THREE.Color(PALETAS.triasico.niebla),
             sol: new THREE.Color(PALETAS.triasico.sol),
             cieloHemi: new THREE.Color(PALETAS.triasico.cieloHemi),
-            sueloHemi: new THREE.Color(PALETAS.triasico.sueloHemi)
+            sueloHemi: new THREE.Color(PALETAS.triasico.sueloHemi),
+            nube: new THREE.Color(PALETAS.triasico.nube)
         };
         this.paletaDestino = PALETAS.triasico;
         this.intensidadDestino = PALETAS.triasico.intensidad;
+        this.coberturaDestino = PALETAS.triasico.cobertura;
 
         configurarCalidad(this.calidadAlta);
         this._construirBase();
@@ -199,8 +207,8 @@ export class Recorrido {
         this.luzSol.shadow.camera.bottom = -55;
         this.luzSol.shadow.camera.near = 1;
         this.luzSol.shadow.camera.far = 240;
-        this.luzSol.shadow.bias = -0.0006;
-        this.luzSol.shadow.normalBias = 0.6;
+        this.luzSol.shadow.bias = -0.0004;
+        this.luzSol.shadow.normalBias = 0.22;
         this.escena.add(this.luzSol);
         this.escena.add(this.luzSol.target);
 
@@ -217,36 +225,95 @@ export class Recorrido {
         this.uniformesCielo = {
             arriba: { value: this.mezcla.arriba.clone() },
             abajo: { value: this.mezcla.abajo.clone() },
-            offset: { value: 30 },
+            nube: { value: this.mezcla.nube.clone() },
+            sol: { value: this.mezcla.sol.clone() },
+            dirSol: { value: new THREE.Vector3(55, 95, 42).normalize() },
+            cobertura: { value: 0.45 },
+            tiempo: { value: 0 },
+            octavas: { value: this.calidadAlta ? 4 : 2 },
             exponente: { value: 0.72 }
         };
         const mat = new THREE.ShaderMaterial({
             uniforms: this.uniformesCielo,
             vertexShader: `
-                varying vec3 vPosicion;
+                varying vec3 vDir;
                 void main() {
                     vec4 mundo = modelMatrix * vec4(position, 1.0);
-                    vPosicion = mundo.xyz;
+                    vDir = normalize(mundo.xyz - cameraPosition);
                     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
                 }
             `,
             fragmentShader: `
                 uniform vec3 arriba;
                 uniform vec3 abajo;
-                uniform float offset;
+                uniform vec3 nube;
+                uniform vec3 sol;
+                uniform vec3 dirSol;
+                uniform float cobertura;
+                uniform float tiempo;
+                uniform float octavas;
                 uniform float exponente;
-                varying vec3 vPosicion;
+                varying vec3 vDir;
+
+                float hash21(vec2 p) {
+                    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+                }
+
+                float ruido(vec2 p) {
+                    vec2 i = floor(p);
+                    vec2 f = fract(p);
+                    f = f * f * (3.0 - 2.0 * f);
+                    float a = hash21(i);
+                    float b = hash21(i + vec2(1.0, 0.0));
+                    float c = hash21(i + vec2(0.0, 1.0));
+                    float d = hash21(i + vec2(1.0, 1.0));
+                    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+                }
+
+                float fbm(vec2 p) {
+                    float valor = 0.0;
+                    float amp = 0.5;
+                    for (int i = 0; i < 4; i++) {
+                        if (float(i) >= octavas) break;
+                        valor += amp * ruido(p);
+                        p *= 2.03;
+                        amp *= 0.5;
+                    }
+                    return valor;
+                }
+
                 void main() {
-                    float h = normalize(vPosicion + vec3(0.0, offset, 0.0)).y;
-                    float mezcla = pow(max(h, 0.0), exponente);
-                    gl_FragColor = vec4(mix(abajo, arriba, mezcla), 1.0);
+                    vec3 dir = normalize(vDir);
+                    float h = pow(max(dir.y, 0.0), exponente);
+                    vec3 color = mix(abajo, arriba, h);
+
+                    // Nubes: capa plana proyectada sobre el cielo, con viento lento.
+                    float sobreHorizonte = smoothstep(0.004, 0.10, dir.y);
+                    vec2 plano = dir.xz / (dir.y + 0.18) * 0.5
+                        + vec2(tiempo * 0.0045, tiempo * 0.0018);
+                    float n = fbm(plano * 5.0);
+                    float umbral = mix(0.74, 0.32, cobertura);
+                    float nubes = smoothstep(umbral, umbral + 0.20, n) * sobreHorizonte;
+
+                    // Las nubes se encienden del lado del sol.
+                    float haciaSol = pow(max(dot(dir, dirSol), 0.0), 4.0);
+                    vec3 colorNube = mix(nube * 0.82, nube, 0.25 + 0.75 * haciaSol);
+                    color = mix(color, colorNube, nubes * 0.88);
+
+                    // Sol: disco, halo cercano y bruma amplia.
+                    float d = max(dot(dir, dirSol), 0.0);
+                    color += sol * pow(d, 1400.0) * 1.7;
+                    color += sol * pow(d, 26.0) * 0.10;
+                    color += sol * pow(d, 6.0) * 0.035;
+
+                    gl_FragColor = vec4(color, 1.0);
                 }
             `,
             side: THREE.BackSide,
             depthWrite: false,
             fog: false
         });
-        const cielo = new THREE.Mesh(new THREE.SphereGeometry(900, 24, 16), mat);
+        const cielo = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 20), mat);
         cielo.position.set(180, 0, 0);
         cielo.frustumCulled = false;
         this.escena.add(cielo);
@@ -543,17 +610,83 @@ export class Recorrido {
             barro.receiveShadow = true;
             grupo.add(barro);
 
-            const agua = new THREE.Mesh(
-                new THREE.CircleGeometry(9, 40),
-                new THREE.MeshStandardMaterial({
-                    map: texturaAgua(),
-                    color: '#8fcbd2',
-                    transparent: true,
-                    opacity: 0.92,
-                    roughness: 0.22,
-                    metalness: 0.05
-                })
+            // Orilla húmeda: anillo oscuro entre el barro y el agua.
+            const orilla = new THREE.Mesh(
+                new THREE.RingGeometry(8.7, 10.6, 40),
+                new THREE.MeshStandardMaterial({ color: '#4b4031', roughness: 1 })
             );
+            orilla.rotation.x = -Math.PI / 2;
+            orilla.position.set(3, 0.05, 16);
+            orilla.receiveShadow = true;
+            grupo.add(orilla);
+
+            // Agua por shader: ondas, reflejo del cielo, brillo del sol y
+            // espuma en la orilla. Sin texturas ni mallas extra.
+            this.aguaUniformes = {
+                tiempo: { value: 0 },
+                agua: { value: new THREE.Color('#3f8f97') },
+                cielo: { value: new THREE.Color('#cfe9ec') },
+                espuma: { value: new THREE.Color('#eef6ee') },
+                sol: { value: new THREE.Color('#fff6d8') },
+                dirSol: { value: new THREE.Vector3(55, 95, 42).normalize() }
+            };
+            const matAgua = new THREE.ShaderMaterial({
+                uniforms: this.aguaUniformes,
+                vertexShader: `
+                    varying vec2 vUv;
+                    varying vec3 vMundo;
+                    void main() {
+                        vUv = uv;
+                        vec4 mundo = modelMatrix * vec4(position, 1.0);
+                        vMundo = mundo.xyz;
+                        gl_Position = projectionMatrix * viewMatrix * mundo;
+                    }
+                `,
+                fragmentShader: `
+                    uniform float tiempo;
+                    uniform vec3 agua;
+                    uniform vec3 cielo;
+                    uniform vec3 espuma;
+                    uniform vec3 sol;
+                    uniform vec3 dirSol;
+                    varying vec2 vUv;
+                    varying vec3 vMundo;
+                    void main() {
+                        float borde = length(vUv - 0.5) * 2.0;
+                        vec2 p = vUv * 14.0;
+
+                        // Dos trenes de ondas cruzados, lentos y de poca altura.
+                        float o1 = sin(p.x * 1.7 + tiempo * 1.1);
+                        float o2 = sin(p.y * 2.3 - tiempo * 0.9);
+                        float o3 = sin((p.x + p.y) * 3.1 + tiempo * 1.7);
+                        float ola = o1 * 0.4 + o2 * 0.35 + o3 * 0.25;
+
+                        vec3 n = normalize(vec3(
+                            cos(p.x * 1.7 + tiempo * 1.1) * 0.16 + cos((p.x + p.y) * 3.1 + tiempo * 1.7) * 0.08,
+                            1.0,
+                            cos(p.y * 2.3 - tiempo * 0.9) * 0.16 - cos((p.x + p.y) * 3.1 + tiempo * 1.7) * 0.08
+                        ));
+
+                        vec3 vista = normalize(cameraPosition - vMundo);
+                        float fresnel = pow(1.0 - max(dot(n, vista), 0.0), 3.0);
+                        vec3 color = mix(agua, cielo, 0.30 + fresnel * 0.50);
+
+                        // Destello del sol sobre las crestas.
+                        vec3 medio = normalize(dirSol + vista);
+                        float brillo = pow(max(dot(n, medio), 0.0), 90.0);
+                        color += sol * brillo * 1.1;
+
+                        // Espuma: anillo irregular que respira con las olas.
+                        float espumaBorde = smoothstep(0.86, 0.995, borde + ola * 0.04);
+                        float ruidoEspuma = 0.5 + 0.5 * sin(borde * 46.0 - tiempo * 2.2 + ola * 4.0);
+                        color = mix(color, espuma, espumaBorde * (0.25 + 0.55 * ruidoEspuma));
+
+                        gl_FragColor = vec4(color, 0.93);
+                    }
+                `,
+                transparent: true
+            });
+            const agua = new THREE.Mesh(new THREE.CircleGeometry(9, 64), matAgua);
             agua.rotation.x = -Math.PI / 2;
             agua.position.set(3, 0.08, 16);
             agua.receiveShadow = true;
@@ -652,6 +785,9 @@ export class Recorrido {
         // Relleno vegetal: reparte plantas alrededor del campamento para que
         // el diorama no se vea vacío. Se mantiene lejos del camino (z ≈ 0).
         this._sembrarVegetacion(grupo, cuerpo.id);
+        this._crearPasto(grupo, cuerpo.id);
+        this._crearDetalleSuelo(grupo, cuerpo.id);
+        this._crearMotes(grupo, cuerpo.id);
 
         // Sombras solo en calidad alta.
         if (!this.calidadAlta) {
@@ -729,6 +865,219 @@ export class Recorrido {
             planta.position.set(x, this._alturaTerreno(centroX + x, z), z);
             planta.rotation.y = rand() * Math.PI * 2;
             grupo.add(planta);
+        }
+    }
+
+    /* -------------------------------------------------------------- PASTO */
+    // Matas instanciadas: una sola llamada de dibujo por parada. Dan silueta
+    // al suelo sin sumar peso ni mallas sueltas.
+    _crearPasto(grupo, bioma) {
+        const colores = {
+            triasico: ['#d8cfa4', '#cdc294', '#e2d9b0'],
+            jurasico: ['#cfe0a8', '#bcd49a', '#dbe8b8'],
+            cretacico: ['#cfe0a0', '#c2d894', '#dce8b0'],
+            extincion: ['#b8ae90', '#a89e82', '#c4b89a']
+        };
+        const paleta = colores[bioma] || colores.triasico;
+        const densidad = bioma === 'extincion' ? 0.55 : 1;
+        const cantidad = Math.round((this.calidadAlta ? 1800 : 620) * densidad);
+        const rand = aleatorioSembrado(9137 + bioma.length * 131);
+        const centroX = grupo.position.x;
+
+        if (!this._pastoGeo) {
+            const plano = new THREE.PlaneGeometry(1, 1);
+            plano.translate(0, 0.5, 0);
+            const cruz = [0, Math.PI / 2].map((giro) => {
+                const copia = plano.clone();
+                copia.rotateY(giro);
+                return copia;
+            });
+            this._pastoGeo = mergeGeometries(cruz);
+            // Las tarjetas de pasto se iluminan como el suelo: si conservan la
+            // normal horizontal quedan casi negras con el sol cenital.
+            const normales = this._pastoGeo.attributes.normal;
+            for (let i = 0; i < normales.count; i++) normales.setXYZ(i, 0, 1, 0);
+            normales.needsUpdate = true;
+            this._pastoMat = new THREE.MeshStandardMaterial({
+                map: texturaPasto(),
+                alphaTest: 0.42,
+                side: THREE.DoubleSide,
+                roughness: 1,
+                metalness: 0
+            });
+        }
+
+        const malla = new THREE.InstancedMesh(this._pastoGeo, this._pastoMat, cantidad);
+        const matriz = new THREE.Matrix4();
+        const posicion = new THREE.Vector3();
+        const giro = new THREE.Quaternion();
+        const escala = new THREE.Vector3();
+        const color = new THREE.Color();
+        const centroLaguna = bioma === 'jurasico' ? { x: 3, z: 16, r: 10.6 } : null;
+
+        let puestas = 0;
+        let intentos = 0;
+        while (puestas < cantidad && intentos < cantidad * 8) {
+            intentos++;
+            const ang = rand() * Math.PI * 2;
+            const radio = 2.5 + Math.sqrt(rand()) * 36;
+            const x = Math.cos(ang) * radio;
+            const z = Math.sin(ang) * radio;
+
+            if (Math.abs(z) < 6) continue; // camino y banquina
+            if (centroLaguna && Math.hypot(x - centroLaguna.x, z - centroLaguna.z) < centroLaguna.r) continue;
+
+            // Manchas de pasto: más tupido en unas zonas que en otras.
+            const mancha = 0.5 + 0.5 * Math.sin(x * 0.33) * Math.cos(z * 0.29);
+            if (rand() > 0.30 + mancha * 0.85) continue;
+
+            const alto = 0.30 + rand() * 0.34;
+            posicion.set(x, this._alturaTerreno(centroX + x, z) - 0.02, z);
+            giro.setFromAxisAngle(UP, rand() * Math.PI);
+            const anchoMata = alto * (1.5 + rand() * 1.1);
+            escala.set(anchoMata, alto, anchoMata);
+            matriz.compose(posicion, giro, escala);
+            malla.setMatrixAt(puestas, matriz);
+
+            color.set(paleta[Math.floor(rand() * paleta.length)]);
+            malla.setColorAt(puestas, color);
+            puestas++;
+        }
+
+        malla.count = puestas;
+        malla.instanceMatrix.needsUpdate = true;
+        if (malla.instanceColor) malla.instanceColor.needsUpdate = true;
+        malla.receiveShadow = true;
+        malla.frustumCulled = false;
+        grupo.add(malla);
+    }
+
+    /* -------------------------------------------------- DETALLE DEL SUELO */
+    // Piedritas y hojas secas instanciadas: el suelo deja de ser una sábana
+    // lisa y gana escala. Dos llamadas de dibujo por parada, cero peso.
+    _crearDetalleSuelo(grupo, bioma) {
+        const centroX = grupo.position.x;
+        const rand = aleatorioSembrado(4471 + bioma.length * 37);
+        const centroLaguna = bioma === 'jurasico' ? { x: 3, z: 16, r: 10.2 } : null;
+        const matriz = new THREE.Matrix4();
+        const posicion = new THREE.Vector3();
+        const giro = new THREE.Quaternion();
+        const escala = new THREE.Vector3();
+        const color = new THREE.Color();
+        const rocas = {
+            triasico: ['#8a6f50', '#7a6046', '#94795a', '#6b5540'],
+            jurasico: ['#6a705c', '#787e6a', '#5c6352', '#828876'],
+            cretacico: ['#7d7358', '#8b8166', '#6e654c', '#968c70'],
+            extincion: ['#5c534c', '#6a5f57', '#4e4640', '#776b62']
+        }[bioma] || ['#8a6f50'];
+        const hojas = {
+            triasico: ['#a8894e', '#8f7340', '#b79a5c'],
+            jurasico: ['#6f8f3c', '#8aa64e', '#5f7a34'],
+            cretacico: ['#b08a3e', '#c9a24c', '#8f6f30'],
+            extincion: ['#6b5646', '#7a6450', '#584738']
+        }[bioma] || ['#a8894e'];
+
+        const colocar = (malla, cantidad, min, max, paleta, plano) => {
+            let puestas = 0;
+            let intentos = 0;
+            while (puestas < cantidad && intentos < cantidad * 10) {
+                intentos++;
+                const ang = rand() * Math.PI * 2;
+                const radio = 2.0 + Math.sqrt(rand()) * 34;
+                const x = Math.cos(ang) * radio;
+                const z = Math.sin(ang) * radio;
+                if (Math.abs(z) < 4.6) continue;
+                if (centroLaguna && Math.hypot(x - centroLaguna.x, z - centroLaguna.z) < centroLaguna.r) continue;
+
+                const tam = min + rand() * (max - min);
+                posicion.set(x, this._alturaTerreno(centroX + x, z) + (plano ? 0.015 : tam * 0.32), z);
+                giro.setFromAxisAngle(UP, rand() * Math.PI * 2);
+                if (plano) escala.set(tam, tam, tam);
+                else escala.set(tam, tam * (0.55 + rand() * 0.5), tam * (0.8 + rand() * 0.4));
+                matriz.compose(posicion, giro, escala);
+                malla.setMatrixAt(puestas, matriz);
+                color.set(paleta[Math.floor(rand() * paleta.length)]);
+                malla.setColorAt(puestas, color);
+                puestas++;
+            }
+            malla.count = puestas;
+            malla.instanceMatrix.needsUpdate = true;
+            if (malla.instanceColor) malla.instanceColor.needsUpdate = true;
+            malla.receiveShadow = true;
+            malla.castShadow = false;
+            malla.frustumCulled = false;
+            grupo.add(malla);
+        };
+
+        const cantidadRocas = Math.round((this.calidadAlta ? 150 : 70) * (bioma === 'extincion' ? 1.6 : 1));
+        const geoRoca = new THREE.DodecahedronGeometry(1, 0);
+        const matRoca = new THREE.MeshStandardMaterial({
+            roughness: 1, metalness: 0, flatShading: true
+        });
+        colocar(new THREE.InstancedMesh(geoRoca, matRoca, cantidadRocas),
+            cantidadRocas, 0.05, 0.18, rocas, false);
+
+        const cantidadHojas = Math.round((this.calidadAlta ? 300 : 120) * (bioma === 'extincion' ? 0.5 : 1));
+        const geoHoja = new THREE.CircleGeometry(1, 5);
+        geoHoja.rotateX(-Math.PI / 2);
+        const matHoja = new THREE.MeshStandardMaterial({
+            roughness: 1, metalness: 0, side: THREE.DoubleSide
+        });
+        colocar(new THREE.InstancedMesh(geoHoja, matHoja, cantidadHojas),
+            cantidadHojas, 0.05, 0.13, hojas, true);
+    }
+
+    /* ------------------------------------------------------------- MOTAS */
+    // Polen y polvillo suspendido: da profundidad al aire y hace que la luz
+    // se sienta volumétrica sin post-proceso.
+    _crearMotes(grupo, bioma) {
+        const cantidad = this.calidadAlta ? 260 : 110;
+        const tonos = {
+            triasico: ['#ffe6b0', '#f7d79a'],
+            jurasico: ['#eaffc0', '#d8f2a8'],
+            cretacico: ['#ffe9b8', '#f5d79c'],
+            extincion: ['#d8b79a', '#c49a86']
+        }[bioma] || ['#ffe6b0'];
+        const rand = aleatorioSembrado(7717 + bioma.length * 53);
+        const centroX = grupo.position.x;
+        const geo = new THREE.BufferGeometry();
+        const posiciones = new Float32Array(cantidad * 3);
+        const datos = [];
+        for (let i = 0; i < cantidad; i++) {
+            const ang = rand() * Math.PI * 2;
+            const radio = Math.sqrt(rand()) * 30;
+            const x = Math.cos(ang) * radio;
+            const z = Math.sin(ang) * radio;
+            const y = 0.6 + rand() * 12;
+            posiciones[i * 3] = x;
+            posiciones[i * 3 + 1] = y;
+            posiciones[i * 3 + 2] = z;
+            datos.push({ x, y, z, fase: rand() * Math.PI * 2, vel: 0.25 + rand() * 0.5 });
+        }
+        geo.setAttribute('position', new THREE.BufferAttribute(posiciones, 3));
+        const puntos = new THREE.Points(geo, new THREE.PointsMaterial({
+            map: texturaParticula(tonos[0], 'rgba(255,255,255,0)'),
+            color: tonos[1] || tonos[0],
+            size: bioma === 'extincion' ? 0.24 : 0.17,
+            transparent: true,
+            opacity: 0.5,
+            depthWrite: false,
+            sizeAttenuation: true
+        }));
+        puntos.frustumCulled = false;
+        grupo.add(puntos);
+        this.motes.push({ puntos, datos, centroX });
+    }
+
+    _actualizarMotes(tiempo) {
+        for (const mota of this.motes) {
+            const arr = mota.puntos.geometry.attributes.position.array;
+            mota.datos.forEach((d, i) => {
+                arr[i * 3] = d.x + Math.sin(tiempo * 0.22 + d.fase) * 1.6;
+                arr[i * 3 + 1] = d.y + Math.sin(tiempo * 0.31 + d.fase * 1.7) * 0.7;
+                arr[i * 3 + 2] = d.z + Math.cos(tiempo * 0.18 + d.fase * 0.6) * 1.4;
+            });
+            mota.puntos.geometry.attributes.position.needsUpdate = true;
         }
     }
 
@@ -1366,6 +1715,7 @@ export class Recorrido {
         const paleta = PALETAS[cuerpo ? cuerpo.id : 'triasico'] || PALETAS.triasico;
         this.paletaDestino = paleta;
         this.intensidadDestino = paleta.intensidad;
+        this.coberturaDestino = paleta.cobertura;
 
         // El asteroide solo se ve en la parada de la extinción: a lo lejos su
         // estela aditiva se ve como una raya blanca sobre el cielo.
@@ -1380,6 +1730,8 @@ export class Recorrido {
             this.mezcla.sol.set(paleta.sol);
             this.mezcla.cieloHemi.set(paleta.cieloHemi);
             this.mezcla.sueloHemi.set(paleta.sueloHemi);
+            this.mezcla.nube.set(paleta.nube);
+            this.uniformesCielo.cobertura.value = paleta.cobertura;
             this._volcarPaleta();
         }
 
@@ -1394,6 +1746,8 @@ export class Recorrido {
         this.escena.fog.color.copy(this.mezcla.niebla);
         this.uniformesCielo.arriba.value.copy(this.mezcla.arriba);
         this.uniformesCielo.abajo.value.copy(this.mezcla.abajo);
+        this.uniformesCielo.nube.value.copy(this.mezcla.nube);
+        this.uniformesCielo.sol.value.copy(this.mezcla.sol);
         this.luzSol.color.copy(this.mezcla.sol);
         this.hemi.color.copy(this.mezcla.cieloHemi);
         this.hemi.groundColor.copy(this.mezcla.sueloHemi);
@@ -1408,6 +1762,9 @@ export class Recorrido {
         this.mezcla.sol.lerp(new THREE.Color(paleta.sol), k);
         this.mezcla.cieloHemi.lerp(new THREE.Color(paleta.cieloHemi), k);
         this.mezcla.sueloHemi.lerp(new THREE.Color(paleta.sueloHemi), k);
+        this.mezcla.nube.lerp(new THREE.Color(paleta.nube), k);
+        this.uniformesCielo.cobertura.value +=
+            (this.coberturaDestino - this.uniformesCielo.cobertura.value) * k;
         this.luzSol.intensity += (this.intensidadDestino - this.luzSol.intensity) * k;
         this._volcarPaleta();
     }
@@ -1702,6 +2059,8 @@ export class Recorrido {
         this._actualizarVuelo(performance.now(), delta);
         this._actualizarPaleta(delta);
         this._actualizarPolvo(delta);
+        this._actualizarMotes(tiempo);
+        this.uniformesCielo.tiempo.value = tiempo;
 
         if (this.mixers.length) {
             for (const mixer of this.mixers) mixer.update(delta);
@@ -1768,9 +2127,10 @@ export class Recorrido {
             this.ceniza.puntos.geometry.attributes.position.needsUpdate = true;
         }
 
-        if (this.agua) {
-            this.agua.material.map.offset.x = tiempo * 0.006;
-            this.agua.material.map.offset.y = tiempo * 0.004;
+        if (this.aguaUniformes) {
+            this.aguaUniformes.tiempo.value = tiempo;
+            this.aguaUniformes.cielo.value.copy(this.mezcla.arriba);
+            this.aguaUniformes.sol.value.copy(this.mezcla.sol);
         }
 
         for (const volcan of this.volcanes) {
