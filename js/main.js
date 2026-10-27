@@ -28,6 +28,16 @@ function nivelGuardado() {
     return 'exploradores';
 }
 
+// Enlaces directos: #cretacico o ?parada=cretacico abren ese campamento.
+function paradaDeUrl() {
+    const hash = decodeURIComponent(window.location.hash.replace(/^#\/?/, '')).toLowerCase();
+    const consulta = (parametros.get('parada') || '').toLowerCase();
+    const buscado = consulta || hash;
+    if (!buscado) return null;
+    const idx = CUERPOS.findIndex((c) => c.id === buscado);
+    return idx >= 0 ? idx : null;
+}
+
 function mostrarError(mensaje) {
     const status = document.getElementById('loadStatus');
     const progreso = document.getElementById('loadProgress');
@@ -45,6 +55,9 @@ async function arrancar() {
 
     let interfaz = null;
     let recorrido = null;
+    const paradaUrl = paradaDeUrl();
+    const inicio = paradaUrl ?? 0;
+    const enlaceDirecto = paradaUrl !== null;
 
     try {
         recorrido = new Recorrido(contenedor, {
@@ -68,7 +81,7 @@ async function arrancar() {
         return;
     }
 
-    interfaz = new Interfaz({ recorrido, nivel: nivelGuardado() });
+    interfaz = new Interfaz({ recorrido, nivel: nivelGuardado(), paradaInicial: inicio });
     if (parametros.get('debug') === '1') window.__recorrido = recorrido;
     interfaz.progreso(0.02, 'Preparando el viaje al Mesozoico');
 
@@ -77,8 +90,8 @@ async function arrancar() {
             interfaz.progreso(fraccion, texto);
         });
 
-        // La miniatura de la tarjeta recién existe cuando se creó el diorama.
-        interfaz.render(0);
+        // La tarjeta ya puede mostrar la parada elegida (o la primera).
+        interfaz.render(inicio);
 
         interfaz.progreso(0.9, 'Cargando el jeep y los dinosaurios');
         await recorrido.cargarVehiculo((pct) => {
@@ -95,13 +108,13 @@ async function arrancar() {
     setTimeout(() => {
         interfaz.ocultarCarga();
 
-        const sinIntro = reducido || parametros.get('intro') === '0';
+        const sinIntro = reducido || enlaceDirecto || parametros.get('intro') === '0';
         if (sinIntro) {
-            recorrido.irA(0, { duracion: 1.2 });
+            recorrido.irA(inicio, { duracion: 1.2 });
         } else {
             interfaz.mostrarIntro();
             // Pequeña pausa para que el fundido de la carga termine antes
-            // de que arranque el hiperespacio.
+            // de que arranque el viaje del jeep.
             setTimeout(() => recorrido.irA(0, { intro: true }), 550);
         }
     }, 450);

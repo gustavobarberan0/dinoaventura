@@ -124,6 +124,7 @@ export class Recorrido {
         this.agua = null;
         this.motes = [];
         this.volcanes = [];
+        this.modelos = { volcan: null, montanas: null, montanas2: null };
         this.jeep = null;
         this.ruedas = [];
         // Modelos animados (T. rex, estegosaurio, triceratops...) y mixers.
@@ -590,12 +591,20 @@ export class Recorrido {
         this._crearCamino();
         this._crearObstaculosIntro();
 
+        alProgreso('Levantando montañas y volcanes', 0.12);
+        await siguienteFrame();
+        await this._cargarRelieve();
+
         for (let i = 0; i < cuerpos.length; i++) {
             const cuerpo = cuerpos[i];
             alProgreso(`Armando el campamento: ${cuerpo.nombre}`, 0.14 + (i / cuerpos.length) * 0.66);
             await siguienteFrame();
             this._crearParada(cuerpo, i);
         }
+
+        alProgreso('Cerrando el horizonte', 0.83);
+        await siguienteFrame();
+        this._crearCordilleras();
 
         alProgreso('Ajustando la luz del Mesozoico', 0.86);
         await siguienteFrame();
@@ -1147,88 +1156,206 @@ export class Recorrido {
         }
     }
 
+    /* ------------------------------------------------------------ RELIEVE */
+    // Montañas y volcán llegan como GLB (ver créditos). Se cargan antes de
+    // armar las paradas para poder clonarlos; si fallan, queda el respaldo
+    // procedural de cada pieza.
+    async _cargarRelieve() {
+        const loader = new GLTFLoader();
+        const cargas = [
+            ['volcan', './models/volcan.glb'],
+            ['montanas', './models/montanas.glb'],
+            ['montanas2', './models/montanas2.glb']
+        ];
+        await Promise.all(cargas.map(async ([clave, archivo]) => {
+            try {
+                const gltf = await loader.loadAsync(archivo);
+                gltf.scene.traverse((hijo) => {
+                    if (!hijo.isMesh) return;
+                    hijo.castShadow = false;
+                    hijo.receiveShadow = false;
+                    const mats = Array.isArray(hijo.material) ? hijo.material : [hijo.material];
+                    for (const mat of mats) {
+                        if (!mat) continue;
+                        // Vienen de FBX: demasiado metálicos, con brillo plástico
+                        // y colores lavados que no combinan con el valle.
+                        mat.metalness = 0;
+                        mat.roughness = 1;
+                        if (!mat.color) continue;
+                        if (clave === 'volcan') {
+                            mat.color.set('#8d7d6e');
+                        } else if (/snow/i.test(mat.name)) {
+                            mat.color.set('#6f6653');
+                        } else if (/dirt/i.test(mat.name)) {
+                            mat.color.set('#332619');
+                        } else {
+                            mat.color.set('#5b5244');
+                        }
+                    }
+                });
+                this.modelos[clave] = gltf.scene;
+            } catch (error) {
+                console.warn(`No se pudo cargar ${archivo}, se usa la versión procedural.`, error);
+            }
+        }));
+    }
+
+    // Clona un GLB y lo deja apoyado en y = 0, centrado en x/z y con el alto pedido.
+    _instancia(modelo, alto) {
+        const copia = modelo.clone(true);
+        copia.updateWorldMatrix(true, true);
+        const tam = new THREE.Box3().setFromObject(copia).getSize(new THREE.Vector3());
+        copia.scale.multiplyScalar(alto / Math.max(tam.y, 0.0001));
+        copia.updateWorldMatrix(true, true);
+        const caja = new THREE.Box3().setFromObject(copia);
+        const centro = caja.getCenter(new THREE.Vector3());
+        copia.position.x -= centro.x;
+        copia.position.z -= centro.z;
+        copia.position.y -= caja.min.y;
+        return copia;
+    }
+
+    // Cordilleras de fondo: los grupos de montañas se encadenan en dos frentes
+    // para formar una pared continua de picos detrás del valle.
+    _crearCordilleras() {
+        const modelos = [this.modelos.montanas, this.modelos.montanas2].filter(Boolean);
+        if (!modelos.length) return;
+
+        const azar = aleatorioSembrado(0x51e11a);
+        const centro = new THREE.Vector3();
+        const volcanes = this.volcanes.map((volcan) => {
+            volcan.grupo.getWorldPosition(centro);
+            return { x: centro.x, z: centro.z };
+        });
+
+        const paso = this.calidadAlta ? 40 : 56;
+        let puestas = 0;
+        for (let base = -150; base < 520; base += paso) {
+            for (const lado of [-1, 1]) {
+                if (azar() < 0.22) continue;
+                const x = base + (azar() - 0.5) * 26;
+                const z = lado * (112 + azar() * 30);
+                const alto = 20 + Math.pow(azar(), 1.4) * 26;
+                if (volcanes.some((p) => Math.hypot(x - p.x, z - p.z) < 54)) continue;
+
+                const copia = this._instancia(modelos[puestas % modelos.length], alto);
+
+                // Cada macizo con su propio tono para que no se note el clonado.
+                const tono = 0.82 + azar() * 0.26;
+                copia.traverse((hijo) => {
+                    if (!hijo.isMesh) return;
+                    const mats = Array.isArray(hijo.material) ? hijo.material : [hijo.material];
+                    const propios = mats.map((mat) => {
+                        const propio = mat.clone();
+                        if (propio.color) propio.color.multiplyScalar(tono);
+                        return propio;
+                    });
+                    hijo.material = propios.length === 1 ? propios[0] : propios;
+                });
+
+                copia.rotation.y = azar() * Math.PI * 2;
+                copia.position.set(x, this._alturaTerreno(x, z) - alto * 0.22, z);
+                this.escena.add(copia);
+                puestas++;
+            }
+        }
+    }
+
     /* ------------------------------------------------------------- VOLCAN */
-    // Cono truncado: la cima queda abierta y el cráter se apoya adentro,
-    // así no aparece ningún anillo flotando sobre la montaña.
+    // Cono volcánico low-poly (Poly by Google, CC-BY) con la lava, el
+    // resplandor y el humo animados por código. Si el GLB no está, se arma
+    // un cono procedural para que la escena nunca quede sin volcán.
     _crearVolcan(grupo, x, z, escala, tipo) {
         const volcan = new THREE.Group();
-        volcan.position.set(x, 0, z);
+        const alto = 22 * escala;
+        const modelo = this.modelos.volcan;
 
-        const alto = 24 * escala;
-        const radioBase = 19 * escala;
+        volcan.position.set(
+            x,
+            this._alturaTerreno(grupo.position.x + x, z) - 0.6 * escala,
+            z
+        );
+
         const radioCima = 2.9 * escala;
-        const lados = 11;
 
-        // Falda del volcán: cilindro con la base ancha y la cima angosta.
-        const cuerpo = new THREE.Mesh(
-            new THREE.CylinderGeometry(radioCima, radioBase, alto, lados, 3),
-            material('#4a3a34')
-        );
-        cuerpo.position.y = alto / 2;
-        cuerpo.castShadow = true;
-        cuerpo.receiveShadow = true;
-        volcan.add(cuerpo);
+        if (modelo) {
+            const copia = this._instancia(modelo, alto);
+            copia.traverse((hijo) => {
+                if (!hijo.isMesh) return;
+                hijo.castShadow = false;
+                hijo.receiveShadow = false;
+            });
+            volcan.add(copia);
+        } else {
+            const radioBase = 19 * escala;
+            const lados = 11;
 
-        // Segunda capa más clara para dar estratos y volumen.
-        const estrato = new THREE.Mesh(
-            new THREE.CylinderGeometry(radioCima * 0.62, radioBase * 0.72, alto * 0.58, lados, 1),
-            material('#5a463d')
-        );
-        estrato.position.y = alto * 0.71;
-        estrato.castShadow = true;
-        volcan.add(estrato);
+            const cuerpo = new THREE.Mesh(
+                new THREE.CylinderGeometry(radioCima, radioBase, alto, lados, 3),
+                material('#4a3a34')
+            );
+            cuerpo.position.y = alto / 2;
+            cuerpo.castShadow = true;
+            cuerpo.receiveShadow = true;
+            volcan.add(cuerpo);
 
-        // Cráter: embudo hundido, apoyado en la cima del cono.
-        const crater = new THREE.Mesh(
-            new THREE.CylinderGeometry(radioCima * 0.98, radioCima * 0.45, 1.6 * escala, lados, 1, true),
-            material('#2b211d', { side: THREE.DoubleSide })
-        );
-        crater.position.y = alto - 0.8 * escala;
-        volcan.add(crater);
+            const estrato = new THREE.Mesh(
+                new THREE.CylinderGeometry(radioCima * 0.62, radioBase * 0.72, alto * 0.58, lados, 1),
+                material('#5a463d')
+            );
+            estrato.position.y = alto * 0.71;
+            estrato.castShadow = true;
+            volcan.add(estrato);
 
-        // Labio del cráter: marca el borde y evita que la cima parezca una mesa.
-        const labio = new THREE.Mesh(
-            new THREE.TorusGeometry(radioCima * 0.99, 0.55 * escala, 5, lados),
-            material('#3a2d27')
-        );
-        labio.rotation.x = Math.PI / 2;
-        labio.position.y = alto;
-        volcan.add(labio);
+            const crater = new THREE.Mesh(
+                new THREE.CylinderGeometry(radioCima * 0.98, radioCima * 0.45, 1.6 * escala, lados, 1, true),
+                material('#2b211d', { side: THREE.DoubleSide })
+            );
+            crater.position.y = alto - 0.8 * escala;
+            volcan.add(crater);
 
-        // Lava líquida en el fondo del cráter.
+            const labio = new THREE.Mesh(
+                new THREE.TorusGeometry(radioCima * 0.99, 0.55 * escala, 5, lados),
+                material('#3a2d27')
+            );
+            labio.rotation.x = Math.PI / 2;
+            labio.position.y = alto;
+            volcan.add(labio);
+        }
+
+        // Lava líquida en el cráter. En el GLB la cima es una meseta plana:
+        // la laguna se apoya arriba para que se vea desde el camino.
         const lava = new THREE.Mesh(
-            new THREE.CircleGeometry(radioCima * 0.50, 18),
+            new THREE.CircleGeometry(modelo ? alto * 0.15 : radioCima * 0.55, 18),
             new THREE.MeshBasicMaterial({ color: tipo === 'extincion' ? '#ff5a2a' : '#ff7a30' })
         );
         lava.rotation.x = -Math.PI / 2;
-        lava.position.y = alto - 1.5 * escala;
+        lava.position.y = modelo ? alto * 1.002 : alto * 0.955;
         volcan.add(lava);
 
-        // Un chorro de lava que baja por la ladera.
-        const colada = new THREE.Mesh(
-            new THREE.ConeGeometry(1.5 * escala, alto * 0.72, 5, 1, true),
-            new THREE.MeshBasicMaterial({
-                color: '#ff6a2a',
-                transparent: true,
-                opacity: 0.85,
-                side: THREE.DoubleSide,
-                depthWrite: false
-            })
-        );
-        colada.position.set(radioCima * 0.4, alto * 0.58, radioCima * 0.5);
-        colada.rotation.z = 0.30;
-        colada.rotation.x = -0.12;
-        volcan.add(colada);
-
-        const resplandor = new THREE.PointLight(0xff6a2a, 14 * escala, 95 * escala, 2);
-        resplandor.position.y = alto + 1.2 * escala;
+        const resplandor = new THREE.PointLight(0xff6a2a, 22 * escala, 95 * escala, 2);
+        resplandor.position.y = alto * 1.05;
         volcan.add(resplandor);
 
+        // Halo aditivo en la boca del cráter: se ve desde lejos.
+        const brillo = new THREE.Sprite(new THREE.SpriteMaterial({
+            map: texturaParticula('rgba(255,186,110,0.95)', 'rgba(255,92,24,0)'),
+            color: '#ffb066',
+            blending: THREE.AdditiveBlending,
+            transparent: true,
+            depthWrite: false,
+            opacity: 0.5
+        }));
+        brillo.scale.setScalar(alto * 0.42);
+        brillo.userData.base = alto * 0.42;
+        brillo.position.y = alto * 1.06;
+        volcan.add(brillo);
+
         grupo.add(volcan);
-        this.volcanes.push({ grupo: volcan, lava, colada, resplandor, fase: Math.random() * 6 });
+        this.volcanes.push({ grupo: volcan, lava, resplandor, brillo, fase: Math.random() * 6 });
 
         // Humo que sube desde el cráter
-        this._crearHumo(volcan, 0, alto + 0.6 * escala, 0, 34, '#8a7a72');
+        this._crearHumo(volcan, 0, alto * 1.01, 0, 34, '#8a7a72');
     }
 
     _crearHumo(padre, x, y, z, cantidad, color) {
@@ -2205,8 +2332,12 @@ export class Recorrido {
 
         for (const volcan of this.volcanes) {
             const pulso = 0.85 + Math.sin(tiempo * 1.3 + volcan.fase) * 0.15;
-            volcan.resplandor.intensity = 10 * pulso;
+            volcan.resplandor.intensity = 22 * pulso;
             volcan.lava.scale.setScalar(1 + Math.sin(tiempo * 0.9 + volcan.fase) * 0.03);
+            if (volcan.brillo) {
+                volcan.brillo.material.opacity = 0.34 + pulso * 0.24;
+                volcan.brillo.scale.setScalar(volcan.brillo.userData.base * (0.92 + pulso * 0.12));
+            }
         }
 
         if (this.asteroide) {

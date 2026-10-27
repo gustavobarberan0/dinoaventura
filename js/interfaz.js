@@ -31,10 +31,10 @@ function mezclar(lista) {
 }
 
 export class Interfaz {
-    constructor({ recorrido, nivel = 'exploradores' }) {
+    constructor({ recorrido, nivel = 'exploradores', paradaInicial = 0 }) {
         this.recorrido = recorrido;
         this.nivel = NIVELES[nivel] ? nivel : 'exploradores';
-        this.idx = 0;
+        this.idx = paradaInicial;
         this.auto = false;
         this.hablando = false;
         this.panelPlegado = false;
@@ -47,7 +47,7 @@ export class Interfaz {
         this._construirRuta();
         this._eventos();
         this._observarPanel();
-        this.render(0);
+        this.render(paradaInicial);
         this._configurarVoz();
     }
 
@@ -112,7 +112,10 @@ export class Interfaz {
 
         // Pestañas
         $$('.tabs [role="tab"]').forEach((tab) => {
-            tab.addEventListener('click', () => this._activarTab(tab.dataset.tab));
+            tab.addEventListener('click', () => {
+                if (this.auto) this.toggleAuto(false);
+                this._activarTab(tab.dataset.tab);
+            });
             tab.addEventListener('keydown', (e) => {
                 const tabs = $$('.tabs [role="tab"]');
                 const i = tabs.indexOf(tab);
@@ -154,6 +157,8 @@ export class Interfaz {
         $('#btnSkipIntro').addEventListener('click', () => this.saltarIntro());
         const btnRepetirIntro = $('#btnRepetirIntro');
         if (btnRepetirIntro) btnRepetirIntro.addEventListener('click', () => this.repetirIntro());
+        const btnImprimirTodas = $('#btnImprimirTodas');
+        if (btnImprimirTodas) btnImprimirTodas.addEventListener('click', () => this.imprimirTodas());
 
         // Chips de glosario (delegación)
         this.el.glosario.addEventListener('click', (e) => {
@@ -196,6 +201,12 @@ export class Interfaz {
 
         // Teclado global
         document.addEventListener('keydown', (e) => this._teclado(e));
+
+        // Enlaces directos: #triasico, #jurasico, #cretacico o #extincion.
+        window.addEventListener('hashchange', () => {
+            const idx = CUERPOS.findIndex((c) => c.id === this._idDeUrl());
+            if (idx >= 0 && idx !== this.idx) this.ir(idx, { manual: true });
+        });
 
         // Pantalla completa
         document.addEventListener('fullscreenchange', () => {
@@ -248,11 +259,30 @@ export class Interfaz {
     }
 
     /* ------------------------------------------------------------ RENDER */
+    // El id de la parada viaja en el hash (#cretacico) para que el docente
+    // pueda guardar o compartir un enlace que abra directo ese diorama.
+    _idDeUrl() {
+        return decodeURIComponent(window.location.hash.replace(/^#\/?/, '')).toLowerCase();
+    }
+
+    _sincronizarUrl(cuerpo) {
+        const destino = `${window.location.pathname}${window.location.search}#${cuerpo.id}`;
+        try {
+            history.replaceState(history.state, '', destino);
+        } catch { /* algunos navegadores bloquean history en file:// */ }
+    }
+
     render(idx) {
         const cuerpo = CUERPOS[idx];
         if (!cuerpo) return;
         this.idx = idx;
         const nivel = NIVELES[this.nivel];
+
+        this._sincronizarUrl(cuerpo);
+
+        // Cada parada tiñe su propia insignia y su antetítulo.
+        this.el.panel.style.setProperty('--stop', cuerpo.color);
+        this.el.panel.style.setProperty('--stop-soft', `${cuerpo.color}4d`);
 
         this.el.eyebrow.innerHTML = `Parada ${idx + 1} de ${CUERPOS.length}<span class="eyebrow-tipo"> · ${escaparHtml(cuerpo.tipo)}</span>`;
         this.el.nombre.textContent = cuerpo.nombre;
@@ -496,7 +526,7 @@ export class Interfaz {
             const mensaje = d.aciertos >= 7
                 ? '¡Sos un experto en dinosaurios!'
                 : d.aciertos >= 5
-                    ? '¡Muy bien! Ya conocés bastante del espacio.'
+                    ? '¡Muy bien! Ya conocés bastante del Mesozoico.'
                     : 'Buen intento. Recorré las paradas y volvé a probar.';
             this.el.desafioCuerpo.innerHTML = `
                 <div class="desafio-resultado">
@@ -611,6 +641,8 @@ export class Interfaz {
         };
         const modal = mapa[nombre];
         if (!modal) return;
+        // Leer con calma: el paseo automático se detiene al abrir una ventana.
+        if (this.auto) this.toggleAuto(false);
         this.ultimoFoco = document.activeElement;
         modal.classList.remove('hidden');
         modal.setAttribute('aria-hidden', 'false');
@@ -669,6 +701,9 @@ export class Interfaz {
             this._detenerVoz();
             return;
         }
+        // La narración dura más que una parada del paseo: si está activo,
+        // conviene detenerlo para escuchar sin que la escena se mueva.
+        if (this.auto) this.toggleAuto(false);
         const cuerpo = CUERPOS[this.idx];
         const nivel = NIVELES[this.nivel];
         const curiosidad = cuerpo.curiosidades[0];
@@ -704,52 +739,31 @@ export class Interfaz {
     }
 
     /* ------------------------------------------------------ IMPRIMIR */
-    imprimirFicha() {
-        const cuerpo = CUERPOS[this.idx];
-        const nivel = NIVELES[this.nivel];
+    _htmlFicha(cuerpo, nivel) {
         const hoy = new Date().toLocaleDateString('es-AR');
         const filas = cuerpo.datos.map((d) => `<tr><th>${escaparHtml(d.etiqueta)}</th><td>${escaparHtml(d.valor)}${d.nota ? ` <small>(${escaparHtml(d.nota)})</small>` : ''}</td></tr>`).join('');
         const curiosidades = cuerpo.curiosidades.map((c) => `<li><b>${escaparHtml(c.titulo)}:</b> ${escaparHtml(c.texto)}</li>`).join('');
+        const palabras = cuerpo.glosario
+            .map((id) => GLOSARIO.find((g) => g.id === id))
+            .filter(Boolean)
+            .map((g) => `<li><b>${escaparHtml(g.termino)}:</b> ${escaparHtml(g.def)}</li>`)
+            .join('');
         const preguntas = cuerpo.quiz.map((q, i) => `
             <div class="preg">
                 <p><b>${i + 1}.</b> ${escaparHtml(q.pregunta)}</p>
                 <ol type="a">${q.opciones.map((op, j) => `<li>${escaparHtml(op)}${j === q.correcta ? ' <span class="ok">(correcta)</span>' : ''}</li>`).join('')}</ol>
+                <p class="explica"><b>Por qué:</b> ${escaparHtml(q.explicacion)}</p>
             </div>`).join('');
 
-        const html = `<!DOCTYPE html>
-<html lang="es"><head><meta charset="utf-8">
-<title>Ficha · ${escaparHtml(cuerpo.nombre)}</title>
-<style>
-    @page { margin: 18mm; }
-    body { font-family: "Segoe UI", Arial, sans-serif; color: #16202e; line-height: 1.5; font-size: 12pt; }
-    header { border-bottom: 3px solid #1f8fc4; padding-bottom: 10px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: flex-end; }
-    header h1 { font-size: 24pt; margin: 0; letter-spacing: .02em; }
-    header p { margin: 2px 0 0; color: #5b6b80; font-size: 10pt; }
-    .emoji { font-size: 30pt; }
-    h2 { font-size: 13pt; color: #1f8fc4; margin: 20px 0 6px; text-transform: uppercase; letter-spacing: .06em; }
-    p { margin: 0 0 8px; }
-    .lead { font-size: 13pt; }
-    table { width: 100%; border-collapse: collapse; margin-top: 4px; }
-    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #d8e2ec; vertical-align: top; }
-    th { width: 38%; color: #40536b; font-weight: 600; }
-    ul { margin: 0; padding-left: 20px; }
-    li { margin-bottom: 5px; }
-    .quiz { page-break-inside: avoid; }
-    .preg { margin-bottom: 12px; }
-    .preg ol { margin: 4px 0 0; padding-left: 22px; }
-    .ok { color: #1a7f4b; font-weight: 700; }
-    footer { margin-top: 22px; padding-top: 8px; border-top: 1px solid #d8e2ec; font-size: 9pt; color: #6a7a8d; }
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 99px; background: #e8f4fb; color: #1f8fc4; font-size: 9pt; }
-</style></head>
-<body>
+        return `<article class="ficha">
     <header>
         <div>
             <h1>${escaparHtml(cuerpo.nombre)}</h1>
             <p>${escaparHtml(cuerpo.tipo)} · ${escaparHtml(cuerpo.resumen)}</p>
         </div>
-        <div class="emoji">${cuerpo.emoji}</div>
+        <div class="emoji" aria-hidden="true">${cuerpo.emoji}</div>
     </header>
-    <p><span class="badge">Nivel ${escaparHtml(nivel.nombre)} · ${escaparHtml(nivel.edades)}</span> &nbsp; Fecha: ${hoy}</p>
+    <p class="meta"><span class="badge">Nivel ${escaparHtml(nivel.nombre)} · ${escaparHtml(nivel.edades)}</span> &nbsp; Fecha: ${hoy}</p>
     <h2>Descripción</h2>
     <p class="lead">${escaparHtml(cuerpo.descripcion[this.nivel])}</p>
     <h2>Datos</h2>
@@ -758,10 +772,75 @@ export class Interfaz {
     <ul>${curiosidades}</ul>
     <h2>Comparación</h2>
     <p>${escaparHtml(cuerpo.comparacion)}</p>
-    <h2 class="quiz">Quiz</h2>
+    <h2>Palabras clave</h2>
+    <ul>${palabras}</ul>
+    <h2>Quiz</h2>
     <div class="quiz">${preguntas}</div>
-    <footer>Dinoaventura · Dinosaurios para escuelas primarias · Ficha generada desde el recorrido interactivo.</footer>
-</body></html>`;
+    <footer>Dinoaventura · Safari por el Mesozoico para escuelas primarias · Ficha generada desde el recorrido interactivo.</footer>
+</article>`;
+    }
+
+    _estilosFicha() {
+        return `<style>
+    @page { margin: 16mm; }
+    * { box-sizing: border-box; }
+    body { font-family: "Segoe UI", Arial, sans-serif; color: #1c2618; line-height: 1.5; font-size: 12pt; }
+    .ficha + .ficha, .portada + .ficha { page-break-before: always; }
+    header { border-bottom: 3px solid #4c7a35; padding-bottom: 10px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
+    header h1 { font-size: 24pt; margin: 0; letter-spacing: .02em; color: #22301c; }
+    header p { margin: 2px 0 0; color: #5b6b50; font-size: 10pt; }
+    .emoji { font-size: 34pt; line-height: 1; }
+    .meta { margin: 0 0 14px; color: #4d5c44; font-size: 10pt; }
+    h2 { font-size: 12pt; color: #3f6b2e; margin: 18px 0 6px; text-transform: uppercase; letter-spacing: .07em; }
+    p { margin: 0 0 8px; }
+    .lead { font-size: 13pt; }
+    table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+    th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #dbe5d0; vertical-align: top; }
+    th { width: 38%; color: #40503a; font-weight: 600; }
+    ul { margin: 0; padding-left: 20px; }
+    li { margin-bottom: 5px; }
+    .quiz { page-break-inside: auto; }
+    .preg { margin-bottom: 14px; page-break-inside: avoid; }
+    .preg ol { margin: 4px 0 0; padding-left: 22px; }
+    .explica { margin-top: 4px; font-size: 9.5pt; color: #566b4d; }
+    .ok { color: #237a3c; font-weight: 700; }
+    footer { margin-top: 22px; padding-top: 8px; border-top: 1px solid #dbe5d0; font-size: 9pt; color: #6a7a62; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 99px; background: #eef5e2; color: #3f6b2e; font-size: 9pt; font-weight: 600; }
+    .portada { border: 0; display: block; text-align: center; padding-top: 50mm; }
+    .portada h1 { font-size: 34pt; color: #2c3d24; }
+    .portada .kicker { letter-spacing: .22em; text-transform: uppercase; color: #6b8548; font-weight: 700; }
+    .portada .indice { margin-top: 14px; font-size: 12pt; color: #40503a; }
+    .portada .nota { margin-top: 36mm; font-size: 10pt; color: #6a7a62; }
+</style>`;
+    }
+
+    imprimirFicha() {
+        this._imprimir([CUERPOS[this.idx]], `Ficha · ${CUERPOS[this.idx].nombre}`);
+    }
+
+    imprimirTodas() {
+        this._imprimir(CUERPOS, 'Cuadernillo · Dinoaventura');
+    }
+
+    _imprimir(cuerpos, titulo) {
+        const nivel = NIVELES[this.nivel];
+        const hoy = new Date().toLocaleDateString('es-AR');
+        const portada = cuerpos.length > 1 ? `
+    <section class="portada">
+        <p class="kicker">Dinoaventura</p>
+        <h1>Cuadernillo del Mesozoico</h1>
+        <p class="indice">${cuerpos.map((c) => escaparHtml(c.nombre)).join(' · ')}</p>
+        <p class="indice">Nivel ${escaparHtml(nivel.nombre)} (${escaparHtml(nivel.edades)}) · ${hoy}</p>
+        <p class="nota">Cuatro fichas listas para imprimir, con datos, curiosidades, palabras clave y quiz con respuestas.</p>
+    </section>` : '';
+        const secciones = cuerpos.map((cuerpo) => this._htmlFicha(cuerpo, nivel)).join('');
+
+        const html = `<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<title>${escaparHtml(titulo)}</title>
+${this._estilosFicha()}
+</head>
+<body>${portada}${secciones}</body></html>`;
 
         const ventana = window.open('', '_blank');
         if (!ventana) {
@@ -821,11 +900,12 @@ export class Interfaz {
     toggleAuto(forzar = null) {
         this.auto = forzar === null ? !this.auto : forzar;
         this.el.btnAuto.setAttribute('aria-pressed', String(this.auto));
+        document.body.classList.toggle('tour', this.auto);
         const icono = this.el.btnAuto.querySelector('span');
         if (icono) icono.textContent = this.auto ? '⏸' : '▶';
         if (this.auto) {
-            this.recorrido.activarTour(true, 9000);
-            this.notificar('Recorrido automático activado · 9 segundos por parada');
+            this.recorrido.activarTour(true, 12000);
+            this.notificar('Recorrido automático activado · 12 segundos por parada');
         } else {
             this.recorrido.activarTour(false);
         }

@@ -52,6 +52,9 @@ models/stegosaurus.glb      Stegosaurus animado (Quaternius, CC0)
 models/velociraptor.glb     Velociraptor animado (Quaternius, CC0)
 models/parasaurolophus.glb  Parasaurolophus animado (Quaternius, CC0)
 models/jeep.glb     Jeep safari (Zsky, CC-BY)
+models/volcan.glb   Cono volcánico (Poly by Google, CC-BY)
+models/montanas.glb Cordillera A (Quaternius, CC0)
+models/montanas2.glb Cordillera B (Quaternius, CC0)
 vendor/three/       Three.js r160 + GLTFLoader, OrbitControls y SkeletonUtils
 scripts/peso.mjs    Control de peso antes de desplegar
 ```
@@ -69,8 +72,15 @@ scripts/peso.mjs    Control de peso antes de desplegar
 - **Jeep safari**: [Zsky](https://poly.pizza/u/Zsky) vía
   [Poly Pizza](https://poly.pizza/m/AcSdGGrgYP), licencia CC-BY (atribución
   requerida; se acredita acá y en la guía docente del sitio).
+- **Montañas**: [Quaternius](https://quaternius.com/) vía Poly Pizza, licencia
+  CC0.
+  - [Mountains](https://poly.pizza/m/w9VBrh7Nz0) ·
+    [Mountain Group](https://poly.pizza/m/a52gSEEq8X)
+- **Volcán**: [Poly by Google](https://poly.pizza/u/Poly by Google) vía
+  [Poly Pizza](https://poly.pizza/m/dwSigTeSMCo), licencia CC-BY (atribución
+  requerida). La lava, el resplandor y el humo se animan por código.
 - **Three.js**: MIT.
-- Resto de los modelos (dinosaurios, plantas, volcanes, nido, laguna) generados
+- Resto de los modelos (dinosaurios, plantas, rocas, nido, laguna) generados
   por código en `js/vida.js` y `js/escena.js`.
 
 ## Despliegue

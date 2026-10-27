@@ -253,8 +253,8 @@ body.intro-activa #app {
     flex: none;
     border-radius: 50%;
     overflow: hidden;
-    background: #16233a;
-    box-shadow: 0 0 0 1px rgba(150, 220, 150, 0.28), 0 8px 22px rgba(0, 0, 0, 0.45);
+    background: radial-gradient(circle at 38% 30%, #33472b, #101a12 72%);
+    box-shadow: 0 0 0 1px var(--stop-soft, rgba(150, 220, 150, 0.28)), 0 8px 22px rgba(0, 0, 0, 0.45);
 }
 .badge {
     position: absolute;
@@ -263,8 +263,8 @@ body.intro-activa #app {
     place-items: center;
     background-repeat: repeat-x;
     background-size: auto 100%;
-    animation: girar-insignia 14s linear infinite;
 }
+.badge.has-image { animation: girar-insignia 14s linear infinite; }
 .badge-emoji { font-size: 2.2rem; filter: drop-shadow(0 2px 6px rgba(0,0,0,.5)); }
 .badge.has-image .badge-emoji { display: none; }
 .badge-shine {
@@ -286,7 +286,7 @@ body.intro-activa #app {
     font-weight: 700;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: var(--cyan);
+    color: var(--stop, var(--cyan));
     margin-bottom: 3px;
 }
 .panel-titles h2 {
@@ -601,6 +601,24 @@ body.intro-activa #app {
 }
 .route-pill[aria-current="true"] .rp-num { opacity: 0.75; }
 
+/* Paseo automático: una barrita muestra cuánto falta para la próxima parada. */
+body.tour .route-pill[aria-current="true"] { position: relative; overflow: hidden; }
+body.tour .route-pill[aria-current="true"]::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    height: 3px;
+    background: rgba(8, 18, 12, 0.45);
+    transform-origin: left center;
+    animation: tourProgreso 12s linear both;
+}
+@keyframes tourProgreso {
+    from { transform: scaleX(0); }
+    to { transform: scaleX(1); }
+}
+
 /* ------------------------------ MODALES -------------------------------- */
 .modal {
     position: fixed;
@@ -692,7 +710,13 @@ body.intro-activa #app {
 /* Guía docente */
 .guia { font-size: 0.9rem; color: #d8e3f2; }
 .guia-intro { color: var(--muted); margin-bottom: 16px; }
-.guia-repetir { margin-bottom: 22px; }
+.guia-acciones {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px;
+    margin-bottom: 22px;
+}
+.guia-repetir { margin-bottom: 0; }
 .guia h3 {
     margin: 22px 0 9px;
     font-family: var(--font-display);
@@ -1028,7 +1052,7 @@ body.intro-activa #app {
 }
 
 /* Móvil/tablet vertical: la ficha se pliega a una barra compacta para
-   dejar ver el planeta. En apaisado no aplica (el panel ya va al costado). */
+   dejar ver el valle. En apaisado no aplica (el panel ya va al costado). */
 @media (max-width: 900px) and (min-height: 521px) {
     .panel-toggle {
         display: inline-flex;
