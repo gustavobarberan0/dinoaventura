@@ -32,10 +32,27 @@ function nivelGuardado() {
 function paradaDeUrl() {
     const hash = decodeURIComponent(window.location.hash.replace(/^#\/?/, '')).toLowerCase();
     const consulta = (parametros.get('parada') || '').toLowerCase();
-    const buscado = consulta || hash;
+    // La app escribe la parada actual en el hash para que se pueda compartir.
+    // Ese hash propio no es un enlace directo: si contara, al recargar la
+    // página nunca más aparecería la intro.
+    const estado = history.state || {};
+    const navegacion = performance.getEntriesByType ? performance.getEntriesByType('navigation')[0] : null;
+    // Las URLs que quedaron con hash en versiones anteriores no tienen marca:
+    // si la página se está recargando, se asume que el hash lo puso la app.
+    const recargaVieja = navegacion && navegacion.type === 'reload' && estado.dinoAuto !== true;
+    const hashPropio = estado.dinoDirecto !== true && (estado.dinoAuto === true || recargaVieja);
+    const buscado = consulta || (hashPropio ? '' : hash);
     if (!buscado) return null;
     const idx = CUERPOS.findIndex((c) => c.id === buscado);
     return idx >= 0 ? idx : null;
+}
+
+// Recuerda que la visita llegó por un enlace directo, para que recargar
+// mantenga esa parada en vez de volver a la intro.
+function marcarEnlaceDirecto() {
+    try {
+        history.replaceState({ ...(history.state || {}), dinoDirecto: true }, '');
+    } catch { /* algunos navegadores bloquean history en file:// */ }
 }
 
 function mostrarError(mensaje) {
@@ -58,6 +75,7 @@ async function arrancar() {
     const paradaUrl = paradaDeUrl();
     const inicio = paradaUrl ?? 0;
     const enlaceDirecto = paradaUrl !== null;
+    if (enlaceDirecto) marcarEnlaceDirecto();
 
     try {
         recorrido = new Recorrido(contenedor, {

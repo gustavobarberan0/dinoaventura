@@ -268,7 +268,11 @@ export class Interfaz {
     _sincronizarUrl(cuerpo) {
         const destino = `${window.location.pathname}${window.location.search}#${cuerpo.id}`;
         try {
-            history.replaceState(history.state, '', destino);
+            const estado = { ...(history.state || {}) };
+            // Marca el hash como "puesto por la app" salvo que la visita haya
+            // llegado por un enlace directo, que sí debe sobrevivir a un refresco.
+            if (estado.dinoDirecto !== true) estado.dinoAuto = true;
+            history.replaceState(estado, '', destino);
         } catch { /* algunos navegadores bloquean history en file:// */ }
     }
 
